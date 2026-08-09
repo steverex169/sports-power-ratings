@@ -212,7 +212,8 @@ def get_nfl_fpi():
         return {t: v[0] for t, v in fb.NFL_T.items()}
 
 
-_SB_URL = ("https://site.api.espn.com/apis/site/v2/sports/football/{league}/"
+# site.web.api works from datacenter IPs (GitHub Actions); site.api 403s there.
+_SB_URL = ("https://site.web.api.espn.com/apis/site/v2/sports/football/{league}/"
            "scoreboard?dates={year}&seasontype=2&week={week}{extra}&limit=400")
 
 _MONTHS = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
