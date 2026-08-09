@@ -2,7 +2,7 @@ name: Build & Deploy Ratings
 
 on:
   schedule:
-    - cron: "0 11 * * *"   # daily ~6am ET / 4pm PKT
+    - cron: "0 11 * * 1"   # weekly: Mondays ~6am ET / 4pm PKT (post-weekend FPI refresh)
   workflow_dispatch:        # manual "Run workflow" button
   push:
     branches: [main]
