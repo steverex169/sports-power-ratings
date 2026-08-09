@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sports Power Ratings 2026</title>
+<style>
+:root{--plane:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;
+--base:#c3c2b7;--border:rgba(11,11,11,.10);--good:#0ca30c;--goodink:#006300;--crit:#d03b3b;
+--series1:#2a78d6;--chip:#eef1f6;--accent:#1F3864;--barbg:#13253f}
+:root[data-theme="dark"]{--plane:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;
+--grid:#2c2c2a;--base:#383835;--border:rgba(255,255,255,.10);--good:#0ca30c;--goodink:#0ca30c;
+--crit:#e66767;--series1:#3987e5;--chip:#26262b;--accent:#9db4e0;--barbg:#0f1c30}
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.45}
+#bar{display:flex;align-items:center;gap:14px;padding:10px 16px;background:var(--barbg);color:#fff;position:sticky;top:0;z-index:5;flex-wrap:wrap}
+#bar b{font-size:15px;letter-spacing:-.01em}
+#bar .seg{border-color:rgba(255,255,255,.25)}
+#bar .seg button{color:#cdd7e6;background:transparent;padding:8px 16px;font-weight:600}
+#bar .seg button.on{background:var(--series1);color:#fff}
+#note{margin-left:auto;color:#9db4e0;font-size:12px}
+#bar .tog{background:transparent;border-color:rgba(255,255,255,.3);color:#cdd7e6}
+.wrap{max-width:1200px;margin:0 auto;padding:26px 20px 60px}
+h1{font-size:22px;margin:0 0 4px;letter-spacing:-.02em}
+.sub{color:var(--ink2);max-width:840px;margin:0 0 6px}
+.tag{display:inline-block;background:var(--chip);color:var(--ink2);border-radius:20px;padding:3px 11px;font-size:12px;margin:2px 6px 2px 0}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px}
+input,select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--base);border-radius:8px;padding:7px 10px}
+button.tog{cursor:pointer;background:var(--surface);border:1px solid var(--base);border-radius:8px;padding:7px 12px;color:var(--ink)}
+.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 10px}
+.seg{display:inline-flex;border:1px solid var(--base);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--surface);color:var(--ink2);padding:7px 13px;cursor:pointer;font:inherit}
+.seg button.on{background:var(--series1);color:#fff;font-weight:600}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:7px 8px;border-bottom:1px solid var(--grid);text-align:right;white-space:nowrap}
+th{color:var(--ink2);font-weight:600;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--surface);border-bottom:1.5px solid var(--base)}
+th.l,td.l{text-align:left}
+td.team{font-weight:600}
+tr:hover td{background:color-mix(in srgb,var(--series1) 7%,transparent)}
+.edgebar-wrap{display:inline-block;width:64px;position:relative;height:11px;vertical-align:middle}
+.pill{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:600}
+.High{background:color-mix(in srgb,var(--good) 20%,transparent);color:var(--goodink)}
+.Med{background:color-mix(in srgb,var(--series1) 18%,transparent);color:var(--series1)}
+.Lowp,.Low{background:var(--chip);color:var(--muted)}
+.sec{margin:32px 0 12px;font-size:17px;font-weight:700;letter-spacing:-.01em}
+.edgegrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:820px){.edgegrid{grid-template-columns:1fr}}
+.ecard h3{margin:0 0 10px;font-size:14px}
+.eitem{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--grid)}
+.eitem:last-child{border-bottom:0}
+.eitem .why{color:var(--ink2);font-size:12px}
+.num{font-variant-numeric:tabular-nums;font-weight:700}
+.pos{color:var(--goodink)}.neg{color:var(--crit)}
+.calc{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;align-items:end}
+.calc label{display:block;font-size:12px;color:var(--ink2);margin-bottom:4px}
+.calc select,.calc input{width:100%}
+.result{margin-top:16px;padding:16px;border-radius:10px;background:color-mix(in srgb,var(--series1) 8%,transparent);border:1px solid var(--border)}
+.bigline{font-size:25px;font-weight:800;letter-spacing:-.02em}
+.lean{font-size:15px;font-weight:700;margin-top:6px}
+.foot{color:var(--muted);font-size:12px;margin-top:30px;line-height:1.6}
+.disc{color:var(--crit);font-size:12px;margin-top:8px}
+.legend{font-size:12px;color:var(--ink2);display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:middle;margin-right:5px}
+.band{color:var(--muted);font-size:11px;font-weight:400}
+.qb{font-size:10px;padding:1px 5px;border-radius:4px;margin-left:4px;font-weight:700}
+.qbY,.up{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--goodink)}
+.qbT{background:var(--chip);color:var(--ink2)}
+.qbN,.dn{background:color-mix(in srgb,var(--crit) 16%,transparent);color:var(--crit)}
+.srcs{margin-top:14px}
+.srcs .mode{display:inline-block;min-width:64px;font-weight:700}
+.mode.live{color:var(--goodink)}.mode.cache{color:var(--series1)}.mode.fallback{color:var(--muted)}
+.view{display:none}.view.on{display:block}
+</style></head><body>
+<div id="bar"><b>🏈 Sports Power Ratings — 2026</b>
+<span class="seg"><button id="bcfb" class="on">College Football</button><button id="bnfl">NFL</button></span>
+<span id="note">Updated __UPDATED__ · auto-built from live sources</span>
+<button class="tog" onclick="toggleTheme()">◐ Theme</button></div>
+
+<!-- ==================== CFB VIEW ==================== -->
+<div class="view on wrap" id="view-cfb">
+<h1>College Football 2026 — Talent · Portal · Returning-Production Power Ratings</h1>
+<p class="sub">Starts from ESPN FPI (fetched live), then over-weights four signals efficiency models lag on:
+<b>roster talent</b>, <b>net transfer-portal movement</b>, <b>returning production</b>, and <b>QB continuity</b>.
+Where this rating diverges most from FPI is where the market is most likely soft.</p>
+<span class="tag">Base: FPI (live)</span><span class="tag">Talent: 247</span><span class="tag">Portal: On3 net</span>
+<span class="tag">Ret. production: SP+/CBS</span><span class="tag" id="c-count"></span>
+
+<div class="sec">Matchup spread calculator <span style="font-weight:400;color:var(--ink2);font-size:13px">— venue-specific home field</span></div>
+<div class="card"><div class="calc">
+<div><label>Home team</label><select id="c-home"></select></div>
+<div><label>Away team</label><select id="c-away"></select></div>
+<div><label>Neutral site?</label><select id="c-neutral"><option value="no">No</option><option value="yes">Yes</option></select></div>
+<div><label>Home-field (auto, editable)</label><input id="c-hfa" type="number" step="0.1"></div>
+<div><label>Market line, home (optional)</label><input id="c-mkt" type="number" placeholder="e.g. -7" step="0.5"></div>
+</div><div class="result"><div class="bigline" id="c-line">—</div>
+<div id="c-detail" style="color:var(--ink2);margin-top:4px"></div><div class="lean" id="c-lean"></div></div></div>
+
+<div class="controls"><span style="font-weight:600">Weighting:</span>
+<span class="seg" id="c-regime">
+<button data-r="C">Conservative</button><button data-r="B" class="on">Base</button><button data-r="A">Aggressive</button></span>
+<span class="legend" style="margin-left:6px"><span>How hard the model tilts off FPI. Edges, order &amp; schedule lines all update live.</span></span></div>
+
+<div class="sec">Week 0 &amp; Week 1 slate <span style="font-weight:400;color:var(--ink2);font-size:13px">— projected line for every game</span></div>
+<div class="controls" style="margin-top:0">
+<span class="seg" id="c-wkfilter"><button data-w="all" class="on">Both weeks</button><button data-w="0">Week 0</button><button data-w="1">Week 1</button></span>
+<span class="seg" id="c-gtype"><button data-g="fbs" class="on">FBS matchups</button><button data-g="all">Include FCS</button></span>
+<span class="legend"><span>Sortable — click a header. ± = combined rating uncertainty.</span></span></div>
+<div class="card" style="padding:6px 12px;max-height:560px;overflow:auto"><table id="c-sched"><thead><tr>
+<th data-sk="week">Wk</th><th class="l" data-sk="date">Date</th><th class="l" data-sk="match">Matchup</th>
+<th class="l" data-sk="site">Site</th><th class="l" data-sk="fav">Projected line</th><th data-sk="line">Line</th><th data-sk="unc">±</th>
+</tr></thead><tbody id="c-sb"></tbody></table></div>
+
+<div class="sec">Biggest disagreements with FPI <span style="font-weight:400;color:var(--ink2);font-size:13px">— high/medium confidence</span></div>
+<div class="edgegrid">
+<div class="card ecard"><h3>▲ Model higher — <span class="pos">buy / take</span></h3><div id="c-buy"></div></div>
+<div class="card ecard"><h3>▼ Model lower — <span class="neg">fade / lay</span></h3><div id="c-fade"></div></div></div>
+
+<div class="sec">Full ratings</div>
+<div class="controls">
+<input id="c-q" placeholder="Search team…" style="min-width:160px">
+<select id="c-fconf"><option value="">All conferences</option></select>
+<select id="c-fconflvl"><option value="">All confidence</option><option>High</option><option>Med</option><option value="Low+">Low+</option><option>Low</option></select>
+<span class="legend"><span><span class="sw" style="background:var(--good)"></span>model &gt; FPI</span><span><span class="sw" style="background:var(--crit)"></span>model &lt; FPI</span></span></div>
+<div class="card" style="padding:6px 12px;max-height:620px;overflow:auto"><table id="c-tbl"><thead><tr>
+<th data-k="rank">#</th><th class="l" data-k="team">Team</th><th class="l" data-k="conf">Conf</th>
+<th data-k="fpi">FPI</th><th data-k="my">My Rating</th><th class="l" data-k="edge">Edge</th>
+<th data-k="retprod">Ret%</th><th data-k="portal">Portal</th><th data-k="talent">Talent</th>
+<th class="l" data-k="conf_lvl">Conf.</th></tr></thead><tbody id="c-tb"></tbody></table></div>
+
+<div class="foot"><b>How the number is built.</b> MyRating = FPI + TalentTilt + PortalAdj + RetProdAdj. Talent pulls FPI toward a tier-specific talent-implied rating (separate Power-4 and G5 fits). Portal adds points per On3 net-movement unit. Returning production adds points for production above the national average, plus a QB flag (returning / transfer / new). Each rating carries a ± band that widens when signals are missing or conflict. The weighting toggle rescales all tilts. Spread calculator uses venue-specific HFA (altitude &amp; crowd), anchored near 2.5. Not yet modeled: coaching changes, injuries, schedule strength; weights are sensitivity-tested, not backtested.
+<div class="srcs" id="c-srcs"></div>
+<div class="disc"><b>For research and entertainment only — not betting or financial advice.</b> Markets are efficient; no model beats them reliably. This is a tool for finding disagreements to investigate.</div></div>
+</div>
+
+<!-- ==================== NFL VIEW ==================== -->
+<div class="view wrap" id="view-nfl">
+<h1>NFL 2026 — Regression + QB / Roster Power Ratings</h1>
+<p class="sub">Starts from ESPN FPI (fetched live), then applies small, honest tilts NFL efficiency models under-react to:
+<b>turnover &amp; close-game regression</b>, <b>QB continuity/injury returns</b>, and <b>offseason roster moves</b>.
+The headline number is <b>model vs. the win-total market</b> — where the softest NFL numbers live.</p>
+<span class="tag">Base: FPI (live)</span><span class="tag">Market: 2026 win totals</span>
+<span class="tag">Regression: 2025 luck</span><span class="tag">32 teams</span>
+
+<div class="sec">Matchup spread calculator</div>
+<div class="card"><div class="calc">
+<div><label>Home team</label><select id="n-home"></select></div>
+<div><label>Away team</label><select id="n-away"></select></div>
+<div><label>Neutral site?</label><select id="n-neutral"><option value="no">No</option><option value="yes">Yes</option></select></div>
+<div><label>Home-field (auto, editable)</label><input id="n-hfa" type="number" step="0.1"></div>
+<div><label>Market line, home (optional)</label><input id="n-mkt" type="number" placeholder="e.g. -3" step="0.5"></div>
+</div><div class="result"><div class="bigline" id="n-line">—</div>
+<div id="n-detail" style="color:var(--ink2);margin-top:4px"></div><div class="lean" id="n-lean"></div></div></div>
+
+<div class="controls" style="margin-top:16px"><span style="font-weight:600">Weighting:</span>
+<span class="seg" id="n-regime"><button data-r="C">Conservative</button><button data-r="B" class="on">Base</button><button data-r="A">Aggressive</button></span>
+<span class="legend" style="margin-left:6px"><span>Scales the tilts. Edges, order &amp; schedule update live.</span></span></div>
+
+<div class="sec">2026 Week 1 slate <span style="font-weight:400;color:var(--ink2);font-size:13px">— projected line per game</span></div>
+<div class="card" style="padding:6px 12px"><table id="n-sched"><thead><tr>
+<th class="l" data-sk="date">Date</th><th class="l" data-sk="match">Matchup</th><th class="l" data-sk="site">Site</th>
+<th class="l" data-sk="fav">Projected line</th><th data-sk="line">Line</th><th data-sk="unc">±</th></tr></thead><tbody id="n-sb"></tbody></table></div>
+
+<div class="sec">Biggest disagreements with the win-total market</div>
+<div class="edgegrid">
+<div class="card ecard"><h3>▲ Model higher — <span class="pos">lean OVER / take</span></h3><div id="n-buy"></div></div>
+<div class="card ecard"><h3>▼ Model lower — <span class="neg">lean UNDER / fade</span></h3><div id="n-fade"></div></div></div>
+
+<div class="sec">Full ratings</div>
+<div class="controls"><input id="n-q" placeholder="Search team…" style="min-width:170px">
+<span class="legend"><span><span class="sw" style="background:var(--good)"></span>model &gt; market</span><span><span class="sw" style="background:var(--crit)"></span>model &lt; market</span></span></div>
+<div class="card" style="padding:6px 12px;max-height:600px;overflow:auto"><table id="n-tbl"><thead><tr>
+<th data-k="rank">#</th><th class="l" data-k="team">Team</th><th data-k="fpi">FPI</th><th data-k="my">My Rating</th>
+<th class="l" data-k="edge">Edge vs Mkt</th><th data-k="win">Win Tot</th><th data-k="reg">Reg</th><th data-k="qb">QB</th><th data-k="ros">Roster</th>
+</tr></thead><tbody id="n-tb"></tbody></table></div>
+
+<div class="foot"><b>How the number is built.</b> MyRating = FPI + regime × (RegTilt + QBAdj + RosterAdj). RegTilt = −(0.06 × 2025 turnover margin + 0.40 × close-game luck), capped ±2.5 — fades teams whose record/margin was luck-inflated, buys the unlucky. QBAdj: star QB back from injury +0.6 to +1.3, clear new-QB downgrade −1.2 to −1.5, unsettled battle 0 (wider band). Roster: ±0.5–0.8. Market rating is implied from 2026 win totals; "Edge vs Mkt" is MyRating minus that. Tilts are deliberately small because NFL FPI and the market are both sharp. NFL HFA ~1.8 and noisy.
+<div class="srcs" id="n-srcs"></div>
+<div class="disc"><b>For research and entertainment only — not betting or financial advice.</b> NFL markets are highly efficient; no model beats them reliably.</div></div>
+</div>
+
+<script>
+const CFB_DATA=__CFB_DATA__;
+const CFB_GAMES=__CFB_GAMES__;
+const NFL_DATA=__NFL_DATA__;
+const NFL_GAMES=__NFL_GAMES__;
+const SOURCES=__SOURCES__;
+
+const $=s=>document.querySelector(s);
+function toggleTheme(){const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark';}
+$('#bcfb').onclick=()=>{show('cfb')};$('#bnfl').onclick=()=>{show('nfl')};
+function show(v){
+ $('#view-cfb').classList.toggle('on',v==='cfb');$('#view-nfl').classList.toggle('on',v==='nfl');
+ $('#bcfb').classList.toggle('on',v==='cfb');$('#bnfl').classList.toggle('on',v==='nfl');}
+
+function renderSources(el){
+ el.innerHTML='<b>Data sources this build:</b><br>'+SOURCES.map(s=>
+  `<span class="mode ${s.mode.split(' ')[0]}">${s.mode.split(' ')[0]}</span> ${s.source}${s.detail?' — '+s.detail:''}`).join('<br>');}
+renderSources($('#c-srcs'));renderSources($('#n-srcs'));
+
+/* ==================== CFB ==================== */
+(function(){
+const DATA=CFB_DATA, GAMES=CFB_GAMES;
+let REG='B';
+const myOf=d=>REG==='C'?d.myC:REG==='A'?d.myA:d.myB;
+const edgeOf=d=>+(myOf(d)-d.fpi).toFixed(1);
+const MAXE=6;
+$('#c-count').textContent=DATA.length+' FBS';
+const byRank=[...DATA].sort((a,b)=>a.rank-b.rank);
+const opts=byRank.map(d=>`<option>${d.team}</option>`).join('');
+$('#c-home').innerHTML=opts;$('#c-away').innerHTML=opts;
+$('#c-home').value=byRank[0]?byRank[0].team:'';$('#c-away').value=byRank[1]?byRank[1].team:'';
+const confs=[...new Set(DATA.map(d=>d.conf))].sort();
+$('#c-fconf').innerHTML+=confs.map(c=>`<option>${c}</option>`).join('');
+const rec=t=>DATA.find(d=>d.team===t);
+
+function autoHFA(){const h=rec($('#c-home').value);$('#c-hfa').value=($('#c-neutral').value==='yes'?0:(h?h.hfa:2.5));}
+function calc(){
+ const h=rec($('#c-home').value),a=rec($('#c-away').value);if(!h||!a)return;
+ const hfa=parseFloat($('#c-hfa').value||0);
+ const margin=myOf(h)-myOf(a)+hfa, homeLine=-margin;
+ const unc=Math.round(Math.sqrt(h.band*h.band+a.band*a.band)*10)/10;
+ let s=Math.abs(margin)<0.05?`Pick'em`:margin>0?`${h.team} −${margin.toFixed(1)}`:`${a.team} −${(-margin).toFixed(1)}`;
+ $('#c-line').textContent=s;
+ $('#c-detail').textContent=`${h.team} ${myOf(h).toFixed(1)} · ${a.team} ${myOf(a).toFixed(1)} · HFA ${hfa.toFixed(1)} → home line ${homeLine>=0?'+':''}${homeLine.toFixed(1)}  (± ${unc})`;
+ const mk=$('#c-mkt').value,L=$('#c-lean');
+ if(mk===''){L.textContent='';return;}
+ const m=parseFloat(mk),diff=homeLine-m;
+ if(Math.abs(diff)<0.5)L.innerHTML='<span style="color:var(--muted)">No edge — model agrees with the market</span>';
+ else if(diff<0)L.innerHTML=`Model leans <span class="pos">${h.team} ${m>=0?'+':''}${m}</span> &nbsp;(${Math.abs(diff).toFixed(1)} pts${Math.abs(diff)<unc?', within uncertainty':''})`;
+ else L.innerHTML=`Model leans <span class="pos">${a.team} +${(-m).toFixed(1)}</span> &nbsp;(${Math.abs(diff).toFixed(1)} pts${Math.abs(diff)<unc?', within uncertainty':''})`;
+}
+['#c-home','#c-away','#c-neutral'].forEach(s=>$(s).addEventListener('change',()=>{autoHFA();calc();}));
+['#c-hfa','#c-mkt'].forEach(s=>$(s).addEventListener('input',calc));
+
+function why(d){let b=[];if(d.talent!=null)b.push('talent '+d.talent);
+ if(d.retprod!=null)b.push('ret '+d.retprod+'%');
+ if(d.portal!=null)b.push('portal '+(d.portal>=0?'+':'')+d.portal);return b.join(' · ');}
+function qbTag(d){return d.qb?`<span class="qb qb${d.qb}">QB ${d.qb==='Y'?'back':d.qb==='T'?'transfer':'new'}</span>`:'';}
+function panels(){
+ const act=DATA.filter(d=>d.conf_lvl==='High'||d.conf_lvl==='Med');
+ const buy=[...act].sort((a,b)=>edgeOf(b)-edgeOf(a)).slice(0,10);
+ const fade=[...act].sort((a,b)=>edgeOf(a)-edgeOf(b)).slice(0,10);
+ const it=d=>{const e=edgeOf(d);return `<div class="eitem"><div><div class="team">${d.team} <span style="color:var(--muted);font-weight:400">${d.conf}</span>${qbTag(d)}</div>
+  <div class="why">${why(d)}</div></div><div style="text-align:right"><div class="num ${e>0?'pos':'neg'}">${e>0?'+':''}${e.toFixed(1)}</div>
+  <div style="font-size:11px;color:var(--ink2)">${d.fpi.toFixed(1)} → ${myOf(d).toFixed(1)} <span class="band">±${d.band}</span></div></div></div>`;};
+ $('#c-buy').innerHTML=buy.map(it).join('');$('#c-fade').innerHTML=fade.map(it).join('');
+}
+let sortK='rank',asc=true;
+function render(){
+ const q=$('#c-q').value.toLowerCase(),fc=$('#c-fconf').value,fl=$('#c-fconflvl').value;
+ let rows=DATA.filter(d=>d.team.toLowerCase().includes(q)&&(!fc||d.conf===fc)&&(!fl||d.conf_lvl===fl));
+ const val=(d,k)=>k==='my'?myOf(d):k==='edge'?edgeOf(d):k==='rank'?myOf(d):d[k];
+ rows.sort((a,b)=>{let x=val(a,sortK),y=val(b,sortK);
+  if(sortK==='rank'){return asc? y-x : x-y;}
+  if(typeof x==='string'){x=x||'';y=y||'';return asc?x.localeCompare(y):y.localeCompare(x);}
+  x=x==null?-999:x;y=y==null?-999:y;return asc?x-y:y-x;});
+ $('#c-tb').innerHTML=rows.map((d,i)=>{const e=edgeOf(d),my=myOf(d);
+  const w=Math.min(Math.abs(e)/MAXE*64,64),col=e>=0?'var(--good)':'var(--crit)';
+  const bar=`<span class="num ${e>0?'pos':e<0?'neg':''}" style="display:inline-block;width:34px;text-align:right;padding-right:6px;font-weight:600">${e>0?'+':''}${e.toFixed(1)}</span>`+
+   `<span class="edgebar-wrap"><span style="position:absolute;left:0;top:0;height:11px;width:${w}px;background:${col};border-radius:3px"></span></span>`;
+  const rank=(sortK==='rank'&&asc)?(i+1):d.rank;
+  return `<tr><td>${rank}</td><td class="l team">${d.team}${qbTag(d)}</td><td class="l" style="color:var(--ink2)">${d.conf}</td>
+   <td>${d.fpi.toFixed(1)}</td><td style="font-weight:700">${my.toFixed(1)} <span class="band">±${d.band}</span></td>
+   <td class="l">${bar}</td>
+   <td>${d.retprod==null?'<span style="color:var(--muted)">—</span>':d.retprod+'%'}</td>
+   <td>${d.portal==null?'<span style="color:var(--muted)">—</span>':(d.portal>=0?'+':'')+d.portal}</td>
+   <td>${d.talent==null?'<span style="color:var(--muted)">—</span>':d.talent}</td>
+   <td class="l"><span class="pill ${d.conf_lvl==='Low+'?'Lowp':d.conf_lvl}">${d.conf_lvl}</span></td></tr>`;}).join('');
+}
+document.querySelectorAll('#c-tbl th').forEach(th=>th.addEventListener('click',()=>{const k=th.dataset.k;
+ if(k===sortK)asc=!asc;else{sortK=k;asc=(k==='team'||k==='conf'||k==='conf_lvl');}render();}));
+['#c-q','#c-fconf','#c-fconflvl'].forEach(s=>$(s).addEventListener('input',render));
+
+let WK='all',GT='fbs',skK='week',skAsc=true;
+function schedLine(g){
+ const a=rec(g.away),h=rec(g.home);
+ if(!g.fbs||!a||!h) return null;
+ const hfa=g.site?0:h.hfa;
+ const margin=myOf(h)-myOf(a)+hfa;
+ const fav=margin>=0?g.home:g.away;
+ const unc=Math.round(Math.sqrt(a.band*a.band+h.band*h.band)*10)/10;
+ return {fav,line:+Math.abs(margin).toFixed(1),unc};
+}
+function renderSched(){
+ let rows=GAMES.filter(g=>(WK==='all'||g.week==+WK)&&(GT==='all'||g.fbs));
+ if(!rows.length){$('#c-sb').innerHTML='<tr><td colspan="7" class="l" style="color:var(--muted)">Schedule unavailable this build — will populate on next successful fetch.</td></tr>';return;}
+ let data=rows.map(g=>({g,s:schedLine(g)}));
+ data.sort((A,B)=>{
+  if(skK==='line'){const x=A.s?A.s.line:-1,y=B.s?B.s.line:-1;return skAsc?x-y:y-x;}
+  if(skK==='unc'){const x=A.s?A.s.unc:-1,y=B.s?B.s.unc:-1;return skAsc?x-y:y-x;}
+  if(skK==='fav'){const x=A.s?A.s.fav:'zz',y=B.s?B.s.fav:'zz';return skAsc?x.localeCompare(y):y.localeCompare(x);}
+  if(skK==='match'){return skAsc?A.g.home.localeCompare(B.g.home):B.g.home.localeCompare(A.g.home);}
+  const x=A.g[skK],y=B.g[skK];if(typeof x==='string')return skAsc?x.localeCompare(y):y.localeCompare(x);
+  return skAsc?x-y:y-x;});
+ $('#c-sb').innerHTML=data.map(({g,s})=>{
+  const site=g.site?`<span title="${g.site}">${g.site.split('(')[0].split(',')[0].trim()}</span>`:'<span style="color:var(--muted)">—</span>';
+  let favcell,linecell,unccell;
+  if(s){favcell=`<b>${s.fav}</b> −${s.line.toFixed(1)}`;
+   linecell=`<span class="num">${s.line.toFixed(1)}</span>`;unccell=`<span class="band">±${s.unc}</span>`;}
+  else{favcell=`<span style="color:var(--muted)">FBS favorite · FCS opp</span>`;linecell='<span style="color:var(--muted)">—</span>';unccell='';}
+  return `<tr><td>${g.week}</td><td class="l" style="color:var(--ink2)">${g.date}</td>
+   <td class="l">${g.away} <span style="color:var(--muted)">@</span> <b>${g.home}</b>${g.note?` <span style="color:var(--muted);font-size:11px">${g.note}</span>`:''}</td>
+   <td class="l" style="color:var(--ink2);font-size:12px">${site}</td>
+   <td class="l">${favcell}</td><td>${linecell}</td><td>${unccell}</td></tr>`;}).join('');
+}
+document.querySelectorAll('#c-wkfilter button').forEach(b=>b.addEventListener('click',()=>{
+ document.querySelectorAll('#c-wkfilter button').forEach(x=>x.classList.remove('on'));b.classList.add('on');WK=b.dataset.w;renderSched();}));
+document.querySelectorAll('#c-gtype button').forEach(b=>b.addEventListener('click',()=>{
+ document.querySelectorAll('#c-gtype button').forEach(x=>x.classList.remove('on'));b.classList.add('on');GT=b.dataset.g;renderSched();}));
+document.querySelectorAll('#c-sched th').forEach(th=>th.addEventListener('click',()=>{const k=th.dataset.sk;
+ if(k===skK)skAsc=!skAsc;else{skK=k;skAsc=(k==='week'||k==='date'||k==='match'||k==='fav');}renderSched();}));
+
+document.querySelectorAll('#c-regime button').forEach(b=>b.addEventListener('click',()=>{
+ document.querySelectorAll('#c-regime button').forEach(x=>x.classList.remove('on'));
+ b.classList.add('on');REG=b.dataset.r;panels();render();calc();renderSched();}));
+autoHFA();calc();panels();render();renderSched();
+})();
+
+/* ==================== NFL ==================== */
+(function(){
+const DATA=NFL_DATA, GAMES=NFL_GAMES;
+let REG='B';
+const myOf=d=>REG==='C'?d.myC:REG==='A'?d.myA:d.myB;
+const edgeOf=d=>+(myOf(d)-d.mkt).toFixed(1);
+const MAXE=3.5;
+const byRank=[...DATA].sort((a,b)=>a.rank-b.rank);
+const opts=byRank.map(d=>`<option>${d.team}</option>`).join('');
+$('#n-home').innerHTML=opts;$('#n-away').innerHTML=opts;
+$('#n-home').value=byRank[0]?byRank[0].team:'';$('#n-away').value=byRank[1]?byRank[1].team:'';
+const rec=t=>DATA.find(d=>d.team===t);
+function autoHFA(){const h=rec($('#n-home').value);$('#n-hfa').value=($('#n-neutral').value==='yes'?0:(h?h.hfa:1.8));}
+function calc(){const h=rec($('#n-home').value),a=rec($('#n-away').value);if(!h||!a)return;
+ const hfa=parseFloat($('#n-hfa').value||0);
+ const margin=myOf(h)-myOf(a)+hfa,homeLine=-margin;const unc=Math.round(Math.sqrt(h.band*h.band+a.band*a.band)*10)/10;
+ let s=Math.abs(margin)<0.05?"Pick'em":margin>0?`${h.team} −${margin.toFixed(1)}`:`${a.team} −${(-margin).toFixed(1)}`;
+ $('#n-line').textContent=s;
+ $('#n-detail').textContent=`${h.team} ${myOf(h).toFixed(1)} · ${a.team} ${myOf(a).toFixed(1)} · HFA ${hfa.toFixed(1)} → home line ${homeLine>=0?'+':''}${homeLine.toFixed(1)}  (± ${unc})`;
+ const mk=$('#n-mkt').value,L=$('#n-lean');if(mk===''){L.textContent='';return;}
+ const m=parseFloat(mk),diff=homeLine-m;
+ if(Math.abs(diff)<0.5)L.innerHTML='<span style="color:var(--muted)">No edge — model agrees with the market</span>';
+ else if(diff<0)L.innerHTML=`Model leans <span class="pos">${h.team} ${m>=0?'+':''}${m}</span> &nbsp;(${Math.abs(diff).toFixed(1)} pts${Math.abs(diff)<unc?', within uncertainty':''})`;
+ else L.innerHTML=`Model leans <span class="pos">${a.team} +${(-m).toFixed(1)}</span> &nbsp;(${Math.abs(diff).toFixed(1)} pts${Math.abs(diff)<unc?', within uncertainty':''})`;}
+['#n-home','#n-away','#n-neutral'].forEach(s=>$(s).addEventListener('change',()=>{autoHFA();calc();}));
+['#n-hfa','#n-mkt'].forEach(s=>$(s).addEventListener('input',calc));
+function why(d){let b=[];if(Math.abs(d.reg)>=0.5)b.push((d.reg>0?'bounce ':'regress ')+d.reg.toFixed(1));
+ if(d.note)b.push(d.note);if(Math.abs(d.ros)>=0.5)b.push('roster '+(d.ros>0?'up':'down'));return b.join(' · ')||'market gap';}
+function panels(){const buy=[...DATA].sort((a,b)=>edgeOf(b)-edgeOf(a)).slice(0,8);
+ const fade=[...DATA].sort((a,b)=>edgeOf(a)-edgeOf(b)).slice(0,8);
+ const it=d=>{const e=edgeOf(d);return `<div class="eitem"><div><div class="team">${d.team}</div><div class="why">${why(d)}</div></div>
+  <div style="text-align:right"><div class="num ${e>0?'pos':'neg'}">${e>0?'+':''}${e.toFixed(1)}</div>
+  <div style="font-size:11px;color:var(--ink2)">O/U ${d.win} · ${myOf(d).toFixed(1)} vs mkt ${d.mkt.toFixed(1)} <span class="band">±${d.band}</span></div></div></div>`;};
+ $('#n-buy').innerHTML=buy.map(it).join('');$('#n-fade').innerHTML=fade.map(it).join('');}
+let sortK='rank',asc=true;
+function render(){const q=$('#n-q').value.toLowerCase();let rows=DATA.filter(d=>d.team.toLowerCase().includes(q));
+ const val=(d,k)=>k==='my'?myOf(d):k==='edge'?edgeOf(d):k==='rank'?myOf(d):d[k];
+ rows.sort((a,b)=>{let x=val(a,sortK),y=val(b,sortK);if(sortK==='rank')return asc?y-x:x-y;
+  if(typeof x==='string')return asc?x.localeCompare(y):y.localeCompare(x);return asc?x-y:y-x;});
+ $('#n-tb').innerHTML=rows.map((d,i)=>{const e=edgeOf(d),my=myOf(d);
+  const w=Math.min(Math.abs(e)/MAXE*58,58),col=e>=0?'var(--good)':'var(--crit)';
+  const bar=`<span class="num ${e>0?'pos':e<0?'neg':''}" style="display:inline-block;width:34px;text-align:right;padding-right:6px;font-weight:600">${e>0?'+':''}${e.toFixed(1)}</span>`+
+   `<span class="edgebar-wrap" style="width:58px"><span style="position:absolute;left:0;top:0;height:11px;width:${w}px;background:${col};border-radius:3px"></span></span>`;
+  const rank=(sortK==='rank'&&asc)?(i+1):d.rank;
+  const rtag=d.reg>=0.5?`<span class="qb up">↑luck</span>`:d.reg<=-0.5?`<span class="qb dn">↓luck</span>`:'';
+  return `<tr><td>${rank}</td><td class="l team">${d.team}${rtag}</td><td>${d.fpi.toFixed(1)}</td>
+   <td style="font-weight:700">${my.toFixed(1)} <span class="band">±${d.band}</span></td><td class="l">${bar}</td>
+   <td>${d.win}</td><td>${d.reg>0?'+':''}${d.reg.toFixed(1)}</td>
+   <td>${d.qb?(d.qb>0?'+':'')+d.qb.toFixed(1):'—'}</td><td>${d.ros?(d.ros>0?'+':'')+d.ros.toFixed(1):'—'}</td></tr>`;}).join('');}
+document.querySelectorAll('#n-tbl th').forEach(th=>th.addEventListener('click',()=>{const k=th.dataset.k;
+ if(k===sortK)asc=!asc;else{sortK=k;asc=(k==='team');}render();}));
+$('#n-q').addEventListener('input',render);
+let skK='date',skAsc=true;
+function schedLine(g){const a=rec(g.away),h=rec(g.home);if(!a||!h)return null;const hfa=g.site?0:h.hfa;
+ const margin=myOf(h)-myOf(a)+hfa;const fav=margin>=0?g.home:g.away;
+ return {fav,line:+Math.abs(margin).toFixed(1),unc:Math.round(Math.sqrt(a.band*a.band+h.band*h.band)*10)/10};}
+function renderSched(){
+ if(!GAMES.length){$('#n-sb').innerHTML='<tr><td colspan="6" class="l" style="color:var(--muted)">Schedule unavailable this build — will populate on next successful fetch.</td></tr>';return;}
+ let data=GAMES.map((g,i)=>({g,i,s:schedLine(g)})).filter(x=>x.s);
+ data.sort((A,B)=>{if(skK==='line')return skAsc?A.s.line-B.s.line:B.s.line-A.s.line;
+  if(skK==='unc')return skAsc?A.s.unc-B.s.unc:B.s.unc-A.s.unc;
+  if(skK==='fav')return skAsc?A.s.fav.localeCompare(B.s.fav):B.s.fav.localeCompare(A.s.fav);
+  if(skK==='match')return skAsc?A.g.home.localeCompare(B.g.home):B.g.home.localeCompare(A.g.home);
+  return skAsc?A.i-B.i:B.i-A.i;});
+ $('#n-sb').innerHTML=data.map(({g,s})=>{const site=g.site?`<span title="${g.site}">${g.site.split(',')[0]}</span>`:'<span style="color:var(--muted)">—</span>';
+  return `<tr><td class="l" style="color:var(--ink2)">${g.date}</td>
+   <td class="l">${g.away} <span style="color:var(--muted)">@</span> <b>${g.home}</b></td>
+   <td class="l" style="color:var(--ink2);font-size:12px">${site}</td>
+   <td class="l"><b>${s.fav}</b> −${s.line.toFixed(1)}</td><td>${s.line.toFixed(1)}</td><td><span class="band">±${s.unc}</span></td></tr>`;}).join('');}
+document.querySelectorAll('#n-sched th').forEach(th=>th.addEventListener('click',()=>{const k=th.dataset.sk;
+ if(k===skK)skAsc=!skAsc;else{skK=k;skAsc=(k==='date'||k==='match'||k==='fav');}renderSched();}));
+document.querySelectorAll('#n-regime button').forEach(b=>b.addEventListener('click',()=>{
+ document.querySelectorAll('#n-regime button').forEach(x=>x.classList.remove('on'));b.classList.add('on');REG=b.dataset.r;
+ panels();render();calc();renderSched();}));
+autoHFA();calc();panels();render();renderSched();
+})();
+</script></body></html>
