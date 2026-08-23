@@ -26,7 +26,7 @@ h1{font-size:22px;margin:0 0 4px;letter-spacing:-.02em}
 input,select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--base);border-radius:8px;padding:7px 10px}
 button.tog{cursor:pointer;background:var(--surface);border:1px solid var(--base);border-radius:8px;padding:7px 12px;color:var(--ink)}
 .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 10px}
-.seg{display:inline-flex;border:1px solid var(--base);border-radius:8px;overflow:hidden}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--base);border-radius:8px;overflow:hidden}
 .seg button{border:0;background:var(--surface);color:var(--ink2);padding:7px 13px;cursor:pointer;font:inherit}
 .seg button.on{background:var(--series1);color:#fff;font-weight:600}
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
@@ -98,9 +98,9 @@ Where this rating diverges most from FPI is where the market is most likely soft
 <button data-r="C">Conservative</button><button data-r="B" class="on">Base</button><button data-r="A">Aggressive</button></span>
 <span class="legend" style="margin-left:6px"><span>How hard the model tilts off FPI. Edges, order &amp; schedule lines all update live.</span></span></div>
 
-<div class="sec">Week 0 &amp; Week 1 slate <span style="font-weight:400;color:var(--ink2);font-size:13px">— projected line for every game</span></div>
+<div class="sec">2026 season slate <span style="font-weight:400;color:var(--ink2);font-size:13px">— projected line for every game, week by week</span></div>
 <div class="controls" style="margin-top:0">
-<span class="seg" id="c-wkfilter"><button data-w="all" class="on">Both weeks</button><button data-w="0">Week 0</button><button data-w="1">Week 1</button></span>
+<span class="seg" id="c-wkfilter"></span>
 <span class="seg" id="c-gtype"><button data-g="fbs" class="on">FBS matchups</button><button data-g="all">Include FCS</button></span>
 <span class="legend"><span>Sortable — click a header. ± = combined rating uncertainty.</span></span></div>
 <div class="card" style="padding:6px 12px;max-height:560px;overflow:auto"><table id="c-sched"><thead><tr>
@@ -125,7 +125,7 @@ Where this rating diverges most from FPI is where the market is most likely soft
 <th data-k="retprod">Ret%</th><th data-k="portal">Portal</th><th data-k="talent">Talent</th>
 <th class="l" data-k="conf_lvl">Conf.</th></tr></thead><tbody id="c-tb"></tbody></table></div>
 
-<div class="foot"><b>How the number is built.</b> MyRating = FPI + TalentTilt + PortalAdj + RetProdAdj. Talent pulls FPI toward a tier-specific talent-implied rating (separate Power-4 and G5 fits). Portal adds points per On3 net-movement unit. Returning production adds points for production above the national average, plus a QB flag (returning / transfer / new). Each rating carries a ± band that widens when signals are missing or conflict. The weighting toggle rescales all tilts. Spread calculator uses venue-specific HFA (altitude &amp; crowd), anchored near 2.5. Not yet modeled: coaching changes, injuries, schedule strength; weights are sensitivity-tested, not backtested.
+<div class="foot"><b>How the number is built.</b> MyRating = FPI + TalentTilt + PortalAdj + RetProdAdj. Talent pulls FPI toward a tier-specific talent-implied rating (separate Power-4 and G5 fits). Portal adds points per On3 net-movement unit. Returning production adds points for production above the national average, plus a QB flag (returning / transfer / new). Each rating carries a ± band that widens when signals are missing or conflict. The weighting toggle rescales all tilts. Spread calculator uses venue-specific HFA (altitude &amp; crowd), anchored near 2.5. Every week&#39;s line uses the same preseason rating — results are not fed back in during the season. Not yet modeled: coaching changes, injuries, schedule strength; weights are sensitivity-tested, not backtested.
 <div class="srcs" id="c-srcs"></div>
 <div class="disc"><b>For research and entertainment only — not betting or financial advice.</b> Markets are efficient; no model beats them reliably. This is a tool for finding disagreements to investigate.</div></div>
 </div>
@@ -153,9 +153,12 @@ The headline number is <b>model vs. the win-total market</b> — where the softe
 <span class="seg" id="n-regime"><button data-r="C">Conservative</button><button data-r="B" class="on">Base</button><button data-r="A">Aggressive</button></span>
 <span class="legend" style="margin-left:6px"><span>Scales the tilts. Edges, order &amp; schedule update live.</span></span></div>
 
-<div class="sec">2026 Week 1 slate <span style="font-weight:400;color:var(--ink2);font-size:13px">— projected line per game</span></div>
-<div class="card" style="padding:6px 12px"><table id="n-sched"><thead><tr>
-<th class="l" data-sk="date">Date</th><th class="l" data-sk="match">Matchup</th><th class="l" data-sk="site">Site</th>
+<div class="sec">2026 season slate <span style="font-weight:400;color:var(--ink2);font-size:13px">— projected line per game, week by week</span></div>
+<div class="controls" style="margin-top:0">
+<span class="seg" id="n-wkfilter"></span>
+<span class="legend"><span>Sortable — click a header. ± = combined rating uncertainty.</span></span></div>
+<div class="card" style="padding:6px 12px;max-height:560px;overflow:auto"><table id="n-sched"><thead><tr>
+<th data-sk="week">Wk</th><th class="l" data-sk="date">Date</th><th class="l" data-sk="match">Matchup</th><th class="l" data-sk="site">Site</th>
 <th class="l" data-sk="fav">Projected line</th><th data-sk="line">Line</th><th data-sk="unc">±</th></tr></thead><tbody id="n-sb"></tbody></table></div>
 
 <div class="sec">Biggest disagreements with the win-total market</div>
@@ -171,7 +174,7 @@ The headline number is <b>model vs. the win-total market</b> — where the softe
 <th class="l" data-k="edge">Edge vs Mkt</th><th data-k="win">Win Tot</th><th data-k="reg">Reg</th><th data-k="qb">QB</th><th data-k="ros">Roster</th>
 </tr></thead><tbody id="n-tb"></tbody></table></div>
 
-<div class="foot"><b>How the number is built.</b> MyRating = FPI + regime × (RegTilt + QBAdj + RosterAdj). RegTilt = −(0.06 × 2025 turnover margin + 0.40 × close-game luck), capped ±2.5 — fades teams whose record/margin was luck-inflated, buys the unlucky. QBAdj: star QB back from injury +0.6 to +1.3, clear new-QB downgrade −1.2 to −1.5, unsettled battle 0 (wider band). Roster: ±0.5–0.8. Market rating is implied from 2026 win totals; "Edge vs Mkt" is MyRating minus that. Tilts are deliberately small because NFL FPI and the market are both sharp. NFL HFA ~1.8 and noisy.
+<div class="foot"><b>How the number is built.</b> MyRating = FPI + regime × (RegTilt + QBAdj + RosterAdj). RegTilt = −(0.06 × 2025 turnover margin + 0.40 × close-game luck), capped ±2.5 — fades teams whose record/margin was luck-inflated, buys the unlucky. QBAdj: star QB back from injury +0.6 to +1.3, clear new-QB downgrade −1.2 to −1.5, unsettled battle 0 (wider band). Roster: ±0.5–0.8. Market rating is implied from 2026 win totals; "Edge vs Mkt" is MyRating minus that. Tilts are deliberately small because NFL FPI and the market are both sharp. NFL HFA ~1.8 and noisy. Every week&#39;s line uses the same preseason rating — results are not fed back in during the season.
 <div class="srcs" id="n-srcs"></div>
 <div class="disc"><b>For research and entertainment only — not betting or financial advice.</b> NFL markets are highly efficient; no model beats them reliably.</div></div>
 </div>
@@ -184,6 +187,14 @@ const NFL_GAMES=__NFL_GAMES__;
 const SOURCES=__SOURCES__;
 
 const $=s=>document.querySelector(s);
+function buildWeekFilter(sel,games,onPick){
+ const box=$(sel);if(!box)return;
+ const wks=[...new Set(games.map(g=>g.week))].sort((a,b)=>a-b);
+ box.innerHTML='<button data-w="all" class="on">All weeks</button>'+
+  wks.map(w=>`<button data-w="${w}">Wk ${w}</button>`).join('');
+ box.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+  box.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');onPick(b.dataset.w);}));}
 function toggleTheme(){const r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark';}
 $('#bcfb').onclick=()=>{show('cfb')};$('#bnfl').onclick=()=>{show('nfl')};
 function show(v){
@@ -301,8 +312,7 @@ function renderSched(){
    <td class="l" style="color:var(--ink2);font-size:12px">${site}</td>
    <td class="l">${favcell}</td><td>${linecell}</td><td>${unccell}</td></tr>`;}).join('');
 }
-document.querySelectorAll('#c-wkfilter button').forEach(b=>b.addEventListener('click',()=>{
- document.querySelectorAll('#c-wkfilter button').forEach(x=>x.classList.remove('on'));b.classList.add('on');WK=b.dataset.w;renderSched();}));
+buildWeekFilter('#c-wkfilter',GAMES,w=>{WK=w;renderSched();});
 document.querySelectorAll('#c-gtype button').forEach(b=>b.addEventListener('click',()=>{
  document.querySelectorAll('#c-gtype button').forEach(x=>x.classList.remove('on'));b.classList.add('on');GT=b.dataset.g;renderSched();}));
 document.querySelectorAll('#c-sched th').forEach(th=>th.addEventListener('click',()=>{const k=th.dataset.sk;
@@ -366,25 +376,27 @@ function render(){const q=$('#n-q').value.toLowerCase();let rows=DATA.filter(d=>
 document.querySelectorAll('#n-tbl th').forEach(th=>th.addEventListener('click',()=>{const k=th.dataset.k;
  if(k===sortK)asc=!asc;else{sortK=k;asc=(k==='team');}render();}));
 $('#n-q').addEventListener('input',render);
-let skK='date',skAsc=true;
+let skK='date',skAsc=true,WK='all';
 function schedLine(g){const a=rec(g.away),h=rec(g.home);if(!a||!h)return null;const hfa=g.site?0:h.hfa;
  const margin=myOf(h)-myOf(a)+hfa;const fav=margin>=0?g.home:g.away;
  return {fav,line:+Math.abs(margin).toFixed(1),unc:Math.round(Math.sqrt(a.band*a.band+h.band*h.band)*10)/10};}
 function renderSched(){
- if(!GAMES.length){$('#n-sb').innerHTML='<tr><td colspan="6" class="l" style="color:var(--muted)">Schedule unavailable this build — will populate on next successful fetch.</td></tr>';return;}
- let data=GAMES.map((g,i)=>({g,i,s:schedLine(g)})).filter(x=>x.s);
+ const rows=GAMES.filter(g=>WK==='all'||g.week==+WK);
+ if(!rows.length){$('#n-sb').innerHTML='<tr><td colspan="7" class="l" style="color:var(--muted)">Schedule unavailable this build — will populate on next successful fetch.</td></tr>';return;}
+ let data=rows.map((g,i)=>({g,i,s:schedLine(g)})).filter(x=>x.s);
  data.sort((A,B)=>{if(skK==='line')return skAsc?A.s.line-B.s.line:B.s.line-A.s.line;
   if(skK==='unc')return skAsc?A.s.unc-B.s.unc:B.s.unc-A.s.unc;
   if(skK==='fav')return skAsc?A.s.fav.localeCompare(B.s.fav):B.s.fav.localeCompare(A.s.fav);
   if(skK==='match')return skAsc?A.g.home.localeCompare(B.g.home):B.g.home.localeCompare(A.g.home);
   return skAsc?A.i-B.i:B.i-A.i;});
  $('#n-sb').innerHTML=data.map(({g,s})=>{const site=g.site?`<span title="${g.site}">${g.site.split(',')[0]}</span>`:'<span style="color:var(--muted)">—</span>';
-  return `<tr><td class="l" style="color:var(--ink2)">${g.date}</td>
+  return `<tr><td>${g.week}</td><td class="l" style="color:var(--ink2)">${g.date}</td>
    <td class="l">${g.away} <span style="color:var(--muted)">@</span> <b>${g.home}</b></td>
    <td class="l" style="color:var(--ink2);font-size:12px">${site}</td>
    <td class="l"><b>${s.fav}</b> −${s.line.toFixed(1)}</td><td>${s.line.toFixed(1)}</td><td><span class="band">±${s.unc}</span></td></tr>`;}).join('');}
+buildWeekFilter('#n-wkfilter',GAMES,w=>{WK=w;renderSched();});
 document.querySelectorAll('#n-sched th').forEach(th=>th.addEventListener('click',()=>{const k=th.dataset.sk;
- if(k===skK)skAsc=!skAsc;else{skK=k;skAsc=(k==='date'||k==='match'||k==='fav');}renderSched();}));
+ if(k===skK)skAsc=!skAsc;else{skK=k;skAsc=(k==='week'||k==='date'||k==='match'||k==='fav');}renderSched();}));
 document.querySelectorAll('#n-regime button').forEach(b=>b.addEventListener('click',()=>{
  document.querySelectorAll('#n-regime button').forEach(x=>x.classList.remove('on'));b.classList.add('on');REG=b.dataset.r;
  panels();render();calc();renderSched();}));

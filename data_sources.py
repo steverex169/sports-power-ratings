@@ -228,61 +228,96 @@ def _fmt_date(iso):
     return f"{_DOW[dt.weekday()]} {_MONTHS[dt.month]} {dt.day}", (dt.month, dt.day)
 
 
-def get_cfb_schedule(year, fbs_teams):
-    """Weeks 1-2 of the CFB season; games before Sep 1 are labeled week 0."""
-    games = []
-    try:
-        modes = []
-        for wk in (1, 2):
-            data, m = http_get_json(
-                _SB_URL.format(league="college-football", year=year, week=wk, extra="&groups=80"),
-                f"cfb_sched_w{wk}")
-            modes.append(m)
-            for ev in data.get("events", []):
-                comp = ev["competitions"][0]
-                home = away = None
-                for c in comp["competitors"]:
-                    nm = canon(c["team"].get("shortDisplayName"))
-                    if c.get("homeAway") == "home":
-                        home = nm
-                    else:
-                        away = nm
-                if not home or not away:
-                    continue
-                date_str, (mo, day) = _fmt_date(ev["date"])
-                week_label = 0 if (mo == 8) else 1
-                site = None
-                if comp.get("neutralSite"):
-                    v = comp.get("venue", {})
-                    city = v.get("address", {}).get("city", "")
-                    site = ", ".join(x for x in [v.get("fullName", ""), city] if x) or "Neutral site"
-                fbs = home in fbs_teams and away in fbs_teams
-                games.append({"week": week_label, "date": date_str, "away": away,
-                              "home": home, "site": site, "note": ev.get("season", {}).get("slug", "") and "",
-                              "fbs": fbs, "fcs": (None if fbs else (away if home in fbs_teams else home))})
-        # keep only games involving at least one FBS team, dedupe
-        games = [g for g in games if g["home"] in fbs_teams or g["away"] in fbs_teams]
-        seen, out = set(), []
-        for g in games:
-            k = (g["away"], g["home"])
-            if k not in seen:
-                seen.add(k)
-                out.append(g)
-        games = out
-        mode = "live" if all(m == "live" for m in modes) else "cache"
-        _report("CFB schedule (ESPN)", mode, f"{len(games)} games, weeks 0-1")
-    except Exception as e:
-        _report("CFB schedule (ESPN)", "fallback", f"unavailable — {e}")
-        games = []
+# Regular-season coverage. CFB: weeks 1-13, conference championships (14) and
+# Army-Navy (15). NFL: the 18-week regular season.
+CFB_WEEKS = tuple(range(1, 16))
+# ESPN placeholder names for matchups the season hasn't decided yet
+_TBD = {"TBD", "TBA"}
+NFL_WEEKS = tuple(range(1, 19))
+
+
+def _week_events(league, year, wk, extra, cache_name):
+    data, mode = http_get_json(
+        _SB_URL.format(league=league, year=year, week=wk, extra=extra), cache_name)
+    return data.get("events", []), mode
+
+
+def get_cfb_schedule(year, fbs_teams, weeks=None):
+    """Full CFB regular season, one fetch per week.
+
+    ESPN folds the late-August "Week 0" games into its week 1, so August games
+    from that week are relabeled week 0; everything else keeps ESPN's week
+    number. A week that fails to fetch is skipped rather than sinking the slate.
+    """
+    weeks = list(weeks if weeks is not None else CFB_WEEKS)
+    games, modes, failed, tbd = [], [], [], 0
+    for wk in weeks:
+        try:
+            events, m = _week_events("college-football", year, wk, "&groups=80",
+                                     f"cfb_sched_w{wk}")
+        except Exception:  # noqa: BLE001 — one bad week shouldn't drop the rest
+            failed.append(wk)
+            continue
+        modes.append(m)
+        for ev in events:
+            comp = ev["competitions"][0]
+            home = away = None
+            for c in comp["competitors"]:
+                nm = canon(c["team"].get("shortDisplayName"))
+                if c.get("homeAway") == "home":
+                    home = nm
+                else:
+                    away = nm
+            if not home or not away:
+                continue
+            if home in _TBD or away in _TBD:
+                # conference championship round: ESPN carries the slots with
+                # placeholder teams until the season decides them
+                tbd += 1
+                continue
+            date_str, (mo, _day) = _fmt_date(ev["date"])
+            week_label = 0 if (wk == 1 and mo == 8) else wk
+            site = None
+            if comp.get("neutralSite"):
+                v = comp.get("venue", {})
+                city = v.get("address", {}).get("city", "")
+                site = ", ".join(x for x in [v.get("fullName", ""), city] if x) or "Neutral site"
+            fbs = home in fbs_teams and away in fbs_teams
+            games.append({"week": week_label, "date": date_str, "away": away,
+                          "home": home, "site": site, "note": "",
+                          "fbs": fbs, "fcs": (None if fbs else (away if home in fbs_teams else home))})
+
+    # keep only games involving at least one FBS team, dedupe within each week
+    games = [g for g in games if g["home"] in fbs_teams or g["away"] in fbs_teams]
+    seen, out = set(), []
+    for g in games:
+        k = (g["week"], g["away"], g["home"])
+        if k not in seen:
+            seen.add(k)
+            out.append(g)
+    games = out
+
+    if not games:
+        _report("CFB schedule (ESPN)", "fallback", f"unavailable — {_span(weeks)} all failed")
+        return []
+    _report("CFB schedule (ESPN)",
+            "live" if all(m == "live" for m in modes) else "cache",
+            _sched_detail(games, failed, tbd))
     return games
 
 
-def get_nfl_schedule(year):
-    try:
-        data, m = http_get_json(
-            _SB_URL.format(league="nfl", year=year, week=1, extra=""), "nfl_sched_w1")
-        games = []
-        for ev in data.get("events", []):
+def get_nfl_schedule(year, weeks=None):
+    """Full NFL regular season, one fetch per week."""
+    weeks = list(weeks if weeks is not None else NFL_WEEKS)
+    games, modes, failed = [], [], []
+    for wk in weeks:
+        try:
+            events, m = _week_events("nfl", year, wk, "", f"nfl_sched_w{wk}")
+        except Exception:  # noqa: BLE001 — one bad week shouldn't drop the rest
+            failed.append(wk)
+            continue
+        modes.append(m)
+        for ev in events:
             comp = ev["competitions"][0]
             home = away = None
             for c in comp["competitors"]:
@@ -291,6 +326,8 @@ def get_nfl_schedule(year):
                     home = nm
                 else:
                     away = nm
+            if not home or not away:
+                continue
             date_str, _ = _fmt_date(ev["date"])
             site = None
             if comp.get("neutralSite"):
@@ -298,12 +335,37 @@ def get_nfl_schedule(year):
                 addr = v.get("address", {})
                 site = ", ".join(x for x in [addr.get("city", ""), addr.get("country", "")] if x) \
                     or v.get("fullName", "Neutral site")
-            games.append({"date": date_str, "away": away, "home": home, "site": site})
-        _report("NFL schedule (ESPN)", "live" if m == "live" else "cache", f"{len(games)} games, week 1")
-        return games
-    except Exception as e:
-        _report("NFL schedule (ESPN)", "fallback", f"unavailable — {e}")
+            games.append({"week": wk, "date": date_str, "away": away, "home": home, "site": site})
+
+    if not games:
+        _report("NFL schedule (ESPN)", "fallback", f"unavailable — {_span(weeks)} all failed")
         return []
+    _report("NFL schedule (ESPN)",
+            "live" if all(m == "live" for m in modes) else "cache",
+            _sched_detail(games, failed))
+    return games
+
+
+def _span(weeks):
+    """'week 7' / 'weeks 1-18' — contiguous runs collapse to a range."""
+    if len(weeks) == 1:
+        return f"week {weeks[0]}"
+    if weeks == list(range(weeks[0], weeks[-1] + 1)):
+        return f"weeks {weeks[0]}-{weeks[-1]}"
+    return "weeks " + ", ".join(map(str, weeks))
+
+
+def _sched_detail(games, failed, tbd=0):
+    wks = sorted({g["week"] for g in games})
+    detail = f"{len(games)} games, {_span(wks)}"
+    notes = []
+    if failed:
+        notes.append(f"week{'s' if len(failed) > 1 else ''} {', '.join(map(str, failed))} unavailable")
+    if tbd:
+        notes.append(f"{tbd} matchup{'s' if tbd > 1 else ''} still TBD")
+    if notes:
+        detail += " (" + "; ".join(notes) + ")"
+    return detail
 
 
 # ---------------- CFBD (optional, key required) ----------------
