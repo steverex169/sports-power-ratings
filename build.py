@@ -97,6 +97,8 @@ def main():
             .replace("__NFL_DATA__", j(models.nfl_rows_for_dashboard(nfl_df)))
             .replace("__NFL_GAMES__", j(nfl_games))
             .replace("__SOURCES__", j(ds.SOURCES))
+            .replace("__CUR_WK_CFB__", j(ds.CURRENT_WEEK.get("cfb")))
+            .replace("__CUR_WK_NFL__", j(ds.CURRENT_WEEK.get("nfl")))
             .replace("__UPDATED__", updated))
 
     out = os.path.join(BASE, "index.html")
@@ -107,6 +109,7 @@ def main():
         wks = len({g["week"] for g in games})
         return f"{len(games)} {label} games across {wks} week{'s' if wks != 1 else ''}"
     print(f"Slate: {slate('CFB', cfb_games)}, {slate('NFL', nfl_games)}")
+    print(f"Current week: CFB {ds.CURRENT_WEEK.get('cfb')}, NFL {ds.CURRENT_WEEK.get('nfl')}")
     print("Saved: cfb_ratings_v2.csv, nfl_ratings.csv")
 
     if args.open:

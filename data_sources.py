@@ -8,6 +8,7 @@ Optional: set CFBD_API_KEY (env var, or a `cfbd_key.txt` file next to this
 script) to pull CFB talent + returning production live from
 collegefootballdata.com instead of the bundled snapshots.
 """
+import datetime
 import json
 import os
 import socket
@@ -24,6 +25,10 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 
 # Build report: list of dicts {source, mode, detail} — mode: live | cache | fallback
 SOURCES = []
+
+# Which week each league is currently in, derived from kickoff times while the
+# schedule is fetched. Preseason -> the first week; season over -> last week + 1.
+CURRENT_WEEK = {}
 
 
 def _report(source, mode, detail=""):
@@ -236,6 +241,15 @@ _TBD = {"TBD", "TBA"}
 NFL_WEEKS = tuple(range(1, 19))
 
 
+def _current_week(kickoffs):
+    """kickoffs: [(week_label, kickoff_utc)] -> week now being played / next up."""
+    if not kickoffs:
+        return None
+    now = datetime.datetime.now(datetime.timezone.utc)
+    upcoming = [w for w, k in kickoffs if k >= now]
+    return min(upcoming) if upcoming else max(w for w, _ in kickoffs) + 1
+
+
 def _week_events(league, year, wk, extra, cache_name):
     data, mode = http_get_json(
         _SB_URL.format(league=league, year=year, week=wk, extra=extra), cache_name)
@@ -250,7 +264,8 @@ def get_cfb_schedule(year, fbs_teams, weeks=None):
     number. A week that fails to fetch is skipped rather than sinking the slate.
     """
     weeks = list(weeks if weeks is not None else CFB_WEEKS)
-    games, modes, failed, tbd = [], [], [], 0
+    games, modes, failed, tbd, malformed = [], [], [], 0, 0
+    kickoffs = []
     for wk in weeks:
         try:
             events, m = _week_events("college-football", year, wk, "&groups=80",
@@ -260,10 +275,15 @@ def get_cfb_schedule(year, fbs_teams, weeks=None):
             continue
         modes.append(m)
         for ev in events:
-            comp = ev["competitions"][0]
+            # ESPN occasionally emits an empty or partial event object; skip it
+            # rather than sink an unattended build
+            comp = next(iter(ev.get("competitions") or []), None)
+            if not comp or not comp.get("competitors"):
+                malformed += 1
+                continue
             home = away = None
             for c in comp["competitors"]:
-                nm = canon(c["team"].get("shortDisplayName"))
+                nm = canon(c.get("team", {}).get("shortDisplayName"))
                 if c.get("homeAway") == "home":
                     home = nm
                 else:
@@ -275,8 +295,13 @@ def get_cfb_schedule(year, fbs_teams, weeks=None):
                 # placeholder teams until the season decides them
                 tbd += 1
                 continue
+            if not ev.get("date"):
+                malformed += 1
+                continue
             date_str, (mo, _day) = _fmt_date(ev["date"])
             week_label = 0 if (wk == 1 and mo == 8) else wk
+            kickoffs.append((week_label, datetime.datetime.fromisoformat(
+                ev["date"].replace("Z", "+00:00"))))
             site = None
             if comp.get("neutralSite"):
                 v = comp.get("venue", {})
@@ -297,19 +322,20 @@ def get_cfb_schedule(year, fbs_teams, weeks=None):
             out.append(g)
     games = out
 
+    CURRENT_WEEK["cfb"] = _current_week(kickoffs)
     if not games:
         _report("CFB schedule (ESPN)", "fallback", f"unavailable — {_span(weeks)} all failed")
         return []
     _report("CFB schedule (ESPN)",
             "live" if all(m == "live" for m in modes) else "cache",
-            _sched_detail(games, failed, tbd))
+            _sched_detail(games, failed, tbd, malformed))
     return games
 
 
 def get_nfl_schedule(year, weeks=None):
     """Full NFL regular season, one fetch per week."""
     weeks = list(weeks if weeks is not None else NFL_WEEKS)
-    games, modes, failed = [], [], []
+    games, modes, failed, kickoffs, malformed = [], [], [], [], 0
     for wk in weeks:
         try:
             events, m = _week_events("nfl", year, wk, "", f"nfl_sched_w{wk}")
@@ -318,15 +344,21 @@ def get_nfl_schedule(year, weeks=None):
             continue
         modes.append(m)
         for ev in events:
-            comp = ev["competitions"][0]
+            comp = next(iter(ev.get("competitions") or []), None)
+            if not comp or not comp.get("competitors"):
+                malformed += 1
+                continue
             home = away = None
             for c in comp["competitors"]:
-                nm = c["team"].get("displayName")
+                nm = c.get("team", {}).get("displayName")
                 if c.get("homeAway") == "home":
                     home = nm
                 else:
                     away = nm
             if not home or not away:
+                continue
+            if not ev.get("date"):
+                malformed += 1
                 continue
             date_str, _ = _fmt_date(ev["date"])
             site = None
@@ -335,14 +367,17 @@ def get_nfl_schedule(year, weeks=None):
                 addr = v.get("address", {})
                 site = ", ".join(x for x in [addr.get("city", ""), addr.get("country", "")] if x) \
                     or v.get("fullName", "Neutral site")
+            kickoffs.append((wk, datetime.datetime.fromisoformat(
+                ev["date"].replace("Z", "+00:00"))))
             games.append({"week": wk, "date": date_str, "away": away, "home": home, "site": site})
 
+    CURRENT_WEEK["nfl"] = _current_week(kickoffs)
     if not games:
         _report("NFL schedule (ESPN)", "fallback", f"unavailable — {_span(weeks)} all failed")
         return []
     _report("NFL schedule (ESPN)",
             "live" if all(m == "live" for m in modes) else "cache",
-            _sched_detail(games, failed))
+            _sched_detail(games, failed, malformed=malformed))
     return games
 
 
@@ -355,7 +390,7 @@ def _span(weeks):
     return "weeks " + ", ".join(map(str, weeks))
 
 
-def _sched_detail(games, failed, tbd=0):
+def _sched_detail(games, failed, tbd=0, malformed=0):
     wks = sorted({g["week"] for g in games})
     detail = f"{len(games)} games, {_span(wks)}"
     notes = []
@@ -363,6 +398,8 @@ def _sched_detail(games, failed, tbd=0):
         notes.append(f"week{'s' if len(failed) > 1 else ''} {', '.join(map(str, failed))} unavailable")
     if tbd:
         notes.append(f"{tbd} matchup{'s' if tbd > 1 else ''} still TBD")
+    if malformed:
+        notes.append(f"{malformed} malformed event{'s' if malformed > 1 else ''} skipped")
     if notes:
         detail += " (" + "; ".join(notes) + ")"
     return detail
