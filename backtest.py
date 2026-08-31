@@ -10,6 +10,7 @@ than assuming it.
     .venv/bin/python backtest.py --league nfl        # one league
     .venv/bin/python backtest.py --years 2023-2025
     .venv/bin/python backtest.py --audit             # lookahead check only
+    .venv/bin/python backtest.py --tilts             # do the NFL tilts earn their place?
 
 What it can and cannot answer, stated up front:
 
@@ -19,11 +20,14 @@ What it can and cannot answer, stated up front:
   * CAN  — for the NFL, how the rating compares to the closing spread, which is
            the only benchmark that matters (nflverse publishes closing lines
            free, back to 1999).
-  * CANNOT — validate the curated tilts (CFB portal, QB status, NFL roster
-           adjustments). Those are human judgement calls recorded for 2026
-           only; there is no historical series to replay them against.
-  * CANNOT — score CFB against the market. No free source of historical CFB
-           closing lines exists; CFBD has them behind a (free) API key.
+  * CAN  — rebuild and score the NFL RegTilt exactly (it is a formula over the
+           prior season) and approximate the QB adjustment from nflverse depth
+           charts, then ask whether either beats plain FPI. See `--tilts`.
+  * CANNOT — validate NFL RosterAdj or the CFB QB designation. Those are
+           judgement calls with no historical series behind them.
+  * CANNOT — score CFB against the market, or replay the CFB portal tilt,
+           without a CFBD API key. The key is free and covers both: /lines
+           carries spread and spreadOpen, /player/portal is by season.
 """
 import argparse
 import csv
@@ -33,6 +37,7 @@ import math
 import os
 import statistics
 import sys
+import time
 import urllib.request
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -312,6 +317,8 @@ def main():
                     help="season range, e.g. '2023-2025' or '2024'")
     ap.add_argument("--audit", action="store_true",
                     help="only run the lookahead audit")
+    ap.add_argument("--tilts", action="store_true",
+                    help="NFL only: score the reconstructable tilts against the market")
     args = ap.parse_args()
 
     if "-" in args.years:
@@ -320,6 +327,11 @@ def main():
     else:
         years = [int(args.years)]
     leagues = ["nfl", "cfb"] if args.league == "both" else [args.league]
+
+    if args.tilts:
+        v, m, p = replay_nfl_model(years)
+        report_nfl_model(years, v, m, p)
+        return
 
     for lg in leagues:
         if args.audit:
@@ -332,6 +344,175 @@ def main():
               f"(cached after the first run)…")
         report(lg, years, replay(lg, years))
 
+
+
+# ---------------- NFL tilt reconstruction ----------------
+#
+# The dashboard's NFL tilts are curated for 2026 only, but two of the three are
+# formulas over the prior season, so they can be rebuilt for any year and
+# replayed honestly. Verified against the curated 2026 snapshot (fallback_data
+# NFL_T, built off 2025): point differential and wins match all 32 teams
+# exactly, Pythagorean luck at exponent 2.37 matches within 0.04, and turnover
+# margin matches 29/32. RosterAdj stays a judgement call with no series to
+# replay, so it is left out rather than guessed at.
+
+_NV_TEAMSTATS = ("https://github.com/nflverse/nflverse-data/releases/download/"
+                 "stats_team/stats_team_reg_{yr}.csv")
+_NV_DEPTH = ("https://github.com/nflverse/nflverse-data/releases/download/"
+             "depth_charts/depth_charts_{yr}.csv")
+PYTH_EXP = 2.37
+BETA_TO, BETA_LUCK, CAP_REG = 0.06, 0.40, 2.5
+NEW_QB_ADJ = -1.3   # the curated model's "clear new-QB downgrade" midpoint
+
+
+def _csv_cached(url, name, retries=5):
+    """nflverse assets are large and GitHub occasionally 503s; cache and retry."""
+    path = os.path.join(ds.CACHE_DIR, name)
+    if os.path.exists(path) and os.path.getsize(path) > 0:
+        return open(path).read()
+    last = None
+    for i in range(retries):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=120) as r:
+                text = r.read().decode(errors="replace")
+            open(path, "w").write(text)
+            return text
+        except Exception as e:  # noqa: BLE001
+            last = e
+            time.sleep(2 * (i + 1))
+    raise RuntimeError(f"{name}: {last}")
+
+
+def espn_to_nflverse(years):
+    """{espn_team_id: nflverse abbrev} — the join between ESPN and nflverse."""
+    out = {}
+    for yr in years:
+        for wk in (1, 2, 3):
+            for g in results_week("nfl", yr, wk):
+                for side in ("home", "away"):
+                    t = g[side]
+                    out[t["id"]] = NV_ALIAS.get(t["abbr"], t["abbr"])
+        if len(out) >= 32:
+            break
+    return out
+
+
+def nfl_reg_tilt(year):
+    """RegTilt for `year`, rebuilt from `year - 1` results: {nv_abbrev: tilt}."""
+    prior = year - 1
+    rows = list(csv.DictReader(io.StringIO(
+        _csv_cached(_NV_TEAMSTATS.format(yr=prior), f"bt_teamstats_{prior}.csv"))))
+    I = lambda r, k: int(float(r.get(k) or 0))  # noqa: E731
+    to_margin = {r["team"]: (I(r, "def_interceptions") + I(r, "fumble_recovery_opp"))
+                            - (I(r, "passing_interceptions") + I(r, "fumbles_lost_total"))
+                 for r in rows}
+
+    pf, pa, wins, played = {}, {}, {}, {}
+    for r in csv.DictReader(io.StringIO(
+            _csv_cached(_NFLVERSE, "bt_nflverse_games.csv"))):
+        if r["season"] != str(prior) or r.get("game_type") != "REG" or not r.get("result"):
+            continue
+        hs, as_ = int(float(r["home_score"])), int(float(r["away_score"]))
+        for team, sf, sa in ((r["home_team"], hs, as_), (r["away_team"], as_, hs)):
+            pf[team] = pf.get(team, 0) + sf
+            pa[team] = pa.get(team, 0) + sa
+            played[team] = played.get(team, 0) + 1
+            wins[team] = wins.get(team, 0) + (1 if sf > sa else 0.5 if sf == sa else 0)
+
+    tilts = {}
+    for team in pf:
+        pyth = played[team] * pf[team] ** PYTH_EXP / (pf[team] ** PYTH_EXP + pa[team] ** PYTH_EXP)
+        luck = wins[team] - pyth
+        raw = -(BETA_TO * to_margin.get(team, 0) + BETA_LUCK * luck)
+        tilts[team] = max(-CAP_REG, min(CAP_REG, raw))
+    return tilts
+
+
+def nfl_qb_adj(year):
+    """{(nv_abbrev, week): adj} — a downgrade in any week the listed QB1 is not
+    the one the team opened the season with. A mechanical stand-in for the
+    curated QB call, using that model's own magnitude."""
+    rows = list(csv.DictReader(io.StringIO(
+        _csv_cached(_NV_DEPTH.format(yr=year), f"bt_depth_{year}.csv"))))
+    qb1 = {}
+    for r in rows:
+        if r.get("position") != "QB" or str(r.get("depth_team")) != "1":
+            continue
+        if r.get("game_type") not in (None, "", "REG"):
+            continue
+        try:
+            wk = int(float(r["week"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        name = r.get("full_name") or r.get("football_name")
+        if name:
+            qb1[(r["club_code"], wk)] = name
+
+    opener = {}
+    for (team, wk), name in sorted(qb1.items(), key=lambda kv: kv[0][1]):
+        opener.setdefault(team, name)
+    return {k: (0.0 if v == opener.get(k[0]) else NEW_QB_ADJ) for k, v in qb1.items()}
+
+
+def replay_nfl_model(years):
+    """Score FPI alone against FPI + the reconstructable tilts, both versus the
+    closing line."""
+    cfg = LEAGUES["nfl"]
+    lines = nfl_closing_lines()
+    id2nv = espn_to_nflverse(years)
+    variants = {"FPI alone": [], "FPI + RegTilt": [], "FPI + RegTilt + QB": []}
+    market, picks = [], {k: [] for k in variants}
+
+    for yr in years:
+        reg = nfl_reg_tilt(yr)
+        qbs = nfl_qb_adj(yr)
+        for wk in cfg["weeks"]:
+            games = results_week("nfl", yr, wk)
+            if not games:
+                continue
+            first = min((_dt(g["kickoff"]) for g in games if g.get("kickoff")), default=None)
+            fpi, _ = fpi_asof("nfl", yr, wk, before=first)
+            for g in games:
+                hid, aid = g["home"]["id"], g["away"]["id"]
+                if hid not in fpi or aid not in fpi:
+                    continue
+                hnv, anv = id2nv.get(hid), id2nv.get(aid)
+                key = (yr, wk, hnv, anv)
+                if key not in lines:
+                    continue
+                spread, actual = lines[key], g["margin"]
+                hfa = 0.0 if g["neutral"] else cfg["hfa"]
+                tilt = lambda nv, with_qb: (  # noqa: E731
+                    reg.get(nv, 0.0) + (qbs.get((nv, wk), 0.0) if with_qb else 0.0))
+                preds = {
+                    "FPI alone": fpi[hid] - fpi[aid] + hfa,
+                    "FPI + RegTilt": (fpi[hid] + tilt(hnv, False)) - (fpi[aid] + tilt(anv, False)) + hfa,
+                    "FPI + RegTilt + QB": (fpi[hid] + tilt(hnv, True)) - (fpi[aid] + tilt(anv, True)) + hfa,
+                }
+                market.append(spread - actual)
+                for name, pred in preds.items():
+                    variants[name].append(pred - actual)
+                    if actual != spread:
+                        picks[name].append((abs(pred - spread),
+                                            int((pred > spread) == (actual > spread))))
+    return variants, market, picks
+
+
+def report_nfl_model(years, variants, market, picks):
+    print(f"\n{'='*66}\nNFL MODEL vs MARKET  {years[0]}-{years[-1]}\n{'='*66}")
+    for name, errs in variants.items():
+        print(_fmt(_stats(errs), name))
+    print(_fmt(_stats(market), "closing line (benchmark)"))
+    print("\n  ATS by size of disagreement with the closing line (break-even 52.4%):")
+    print(f"    {'variant':<22}{'edge>=1':>14}{'edge>=2':>14}{'edge>=3':>14}")
+    for name, ps in picks.items():
+        cells = []
+        for lo in (1, 2, 3):
+            sel = [w for e, w in ps if e >= lo]
+            cells.append(f"{sum(sel)}-{len(sel)-sum(sel)} {sum(sel)/len(sel)*100:.1f}%"
+                         if len(sel) >= 30 else "-")
+        print(f"    {name:<22}{cells[0]:>14}{cells[1]:>14}{cells[2]:>14}")
 
 if __name__ == "__main__":
     main()
