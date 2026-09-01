@@ -122,13 +122,16 @@ def results_week(lg, yr, wk):
         f"bt_res_{lg}_{yr}_w{wk}")
     games = []
     for ev in data.get("events", []):
-        comp = ev["competitions"][0]
+        comp = next(iter(ev.get("competitions") or []), None)
+        if not comp or not comp.get("competitors"):
+            continue
         if comp.get("status", {}).get("type", {}).get("name") != "STATUS_FINAL":
             continue
         home = away = None
         for c in comp["competitors"]:
             try:
                 score = int(c.get("score"))
+                c["team"]["id"]
             except (TypeError, ValueError):
                 continue
             rec = {"id": c["team"]["id"], "abbr": c["team"].get("abbreviation"),
@@ -319,6 +322,8 @@ def main():
                     help="only run the lookahead audit")
     ap.add_argument("--tilts", action="store_true",
                     help="NFL only: score the reconstructable tilts against the market")
+    ap.add_argument("--hfa", action="store_true",
+                    help="fit the home-field constant from results")
     args = ap.parse_args()
 
     if "-" in args.years:
@@ -327,6 +332,11 @@ def main():
     else:
         years = [int(args.years)]
     leagues = ["nfl", "cfb"] if args.league == "both" else [args.league]
+
+    if args.hfa:
+        for lg in leagues:
+            report_hfa(lg, years, fit_hfa(lg, years))
+        return
 
     if args.tilts:
         v, m, p = replay_nfl_model(years)
@@ -453,6 +463,63 @@ def nfl_qb_adj(year):
     for (team, wk), name in sorted(qb1.items(), key=lambda kv: kv[0][1]):
         opener.setdefault(team, name)
     return {k: (0.0 if v == opener.get(k[0]) else NEW_QB_ADJ) for k, v in qb1.items()}
+
+
+def fit_hfa(lg, years):
+    """What home-field edge do the results actually imply?
+
+    The rating difference is taken as given and only the constant is fitted, on
+    non-neutral games. Two answers are reported because they optimise different
+    things: the mean residual zeroes the bias (least squares), while the sweep
+    minimises MAE, which is what the dashboard's lines are judged on. Neutral
+    games are scored separately as a control — a correct fit leaves them near
+    zero, since no home edge should apply there.
+    """
+    cfg = LEAGUES[lg]
+    home, neutral = [], []
+    for yr in years:
+        for wk in cfg["weeks"]:
+            games = results_week(lg, yr, wk)
+            if not games:
+                continue
+            first = min((_dt(g["kickoff"]) for g in games if g.get("kickoff")), default=None)
+            fpi, _ = fpi_asof(lg, yr, wk, before=first)
+            for g in games:
+                hid, aid = g["home"]["id"], g["away"]["id"]
+                if hid not in fpi or aid not in fpi:
+                    continue
+                resid = g["margin"] - (fpi[hid] - fpi[aid])
+                (neutral if g["neutral"] else home).append(resid)
+    if not home:
+        return None
+    best, best_mae = None, None
+    for step in range(0, 81):
+        cand = step * 0.1
+        mae = statistics.mean(abs(r - cand) for r in home)
+        if best_mae is None or mae < best_mae:
+            best, best_mae = cand, mae
+    return {"n": len(home), "mean": statistics.mean(home), "median": statistics.median(home),
+            "mae_opt": best, "mae_at_opt": best_mae,
+            "current": cfg["hfa"],
+            "mae_at_current": statistics.mean(abs(r - cfg["hfa"]) for r in home),
+            "neutral_n": len(neutral),
+            "neutral_mean": statistics.mean(neutral) if neutral else None}
+
+
+def report_hfa(lg, years, f):
+    print(f"\n{'='*66}\n{lg.upper()} HOME-FIELD FIT  {years[0]}-{years[-1]}\n{'='*66}")
+    if not f:
+        print("  no data")
+        return
+    print(f"  non-neutral games          n={f['n']}")
+    print(f"  current constant           {f['current']:.2f}  -> MAE {f['mae_at_current']:.3f}")
+    print(f"  bias-zeroing (mean resid)  {f['mean']:.2f}")
+    print(f"  median residual            {f['median']:.2f}")
+    print(f"  MAE-minimising             {f['mae_opt']:.2f}  -> MAE {f['mae_at_opt']:.3f}")
+    print(f"  MAE gained by refitting    {f['mae_at_current'] - f['mae_at_opt']:+.3f} pts/game")
+    if f["neutral_mean"] is not None:
+        print(f"  control: neutral-site mean residual {f['neutral_mean']:+.2f}"
+              f" over {f['neutral_n']} games (should sit near 0)")
 
 
 def replay_nfl_model(years):
