@@ -57,6 +57,9 @@ tr:hover td{background:color-mix(in srgb,var(--series1) 7%,transparent)}
 .lean{font-size:15px;font-weight:700;margin-top:6px}
 .foot{color:var(--muted);font-size:12px;margin-top:30px;line-height:1.6}
 .disc{color:var(--crit);font-size:12px;margin-top:8px}
+.measured{border-left:3px solid var(--base);background:var(--surface);padding:8px 12px;margin:0 0 12px;font-size:12px;color:var(--ink2);line-height:1.5;border-radius:0 6px 6px 0}
+.measured b{color:var(--ink)}
+.measured code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;background:var(--base);padding:1px 5px;border-radius:4px}
 .legend{font-size:12px;color:var(--ink2);display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 .sw{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:middle;margin-right:5px}
 .band{color:var(--muted);font-size:11px;font-weight:400}
@@ -109,9 +112,13 @@ Where this rating diverges most from FPI is where the market is most likely soft
 </tr></thead><tbody id="c-sb"></tbody></table></div>
 
 <div class="sec">Biggest disagreements with FPI <span style="font-weight:400;color:var(--ink2);font-size:13px">— high/medium confidence</span></div>
+<div class="measured"><b>These are questions, not signals.</b> This model has never been scored against a
+college betting market — no free source of historical CFB closing lines exists. In the NFL, where it could be
+tested, disagreements of exactly this kind went <b>48.1%</b> against the closing line over 816 games (2023-25),
+losing at every margin tested, and break-even is 52.4%. Nothing here has been shown to beat a number.</div>
 <div class="edgegrid">
-<div class="card ecard"><h3>▲ Model higher — <span class="pos">buy / take</span></h3><div id="c-buy"></div></div>
-<div class="card ecard"><h3>▼ Model lower — <span class="neg">fade / lay</span></h3><div id="c-fade"></div></div></div>
+<div class="card ecard"><h3>▲ <span class="pos">Model rates higher than FPI</span></h3><div id="c-buy"></div></div>
+<div class="card ecard"><h3>▼ <span class="neg">Model rates lower than FPI</span></h3><div id="c-fade"></div></div></div>
 
 <div class="sec">Full ratings</div>
 <div class="controls">
@@ -127,7 +134,7 @@ Where this rating diverges most from FPI is where the market is most likely soft
 
 <div class="foot"><b>How the number is built.</b> MyRating = FPI + TalentTilt + PortalAdj + RetProdAdj. Talent pulls FPI toward a tier-specific talent-implied rating (separate Power-4 and G5 fits). Portal adds points per On3 net-movement unit. Returning production adds points for production above the national average, plus a QB flag (returning / transfer / new). Each rating carries a ± band that widens when signals are missing or conflict. The weighting toggle rescales all tilts. Spread calculator uses venue-specific HFA (altitude &amp; crowd), anchored near 2.5. Preseason tilts decay with the calendar: held flat through wk 2 then faded to a floor, a schedule measured by replaying 2,262 games of point-in-time FPI (backtest.py). FPI itself refreshes weekly, so late-season lines lean on it. Not yet modeled: coaching changes, injuries, schedule strength; weights are sensitivity-tested, not backtested.
 <div class="srcs" id="c-srcs"></div>
-<div class="disc"><b>For research and entertainment only — not betting or financial advice.</b> Markets are efficient; no model beats them reliably. This is a tool for finding disagreements to investigate.</div></div>
+<div class="disc"><b>For research and entertainment only — not betting or financial advice.</b> Markets are efficient; no model beats them reliably — and this one has been measured, not assumed, to fall short of the closing line. It is a tool for finding disagreements worth understanding.</div></div>
 </div>
 
 <!-- ==================== NFL VIEW ==================== -->
@@ -162,9 +169,14 @@ The headline number is <b>model vs. the win-total market</b> — where the softe
 <th class="l" data-sk="fav">Projected line</th><th data-sk="line">Line</th><th data-sk="unc">±</th></tr></thead><tbody id="n-sb"></tbody></table></div>
 
 <div class="sec">Biggest disagreements with the win-total market</div>
+<div class="measured"><b>These are questions, not signals.</b> Replaying 816 games (2023-25) against closing
+lines with point-in-time ratings, FPI's disagreements with the number went <b>383-414 (48.1%)</b> — and
+48.2% at 2+ points, 42.9% at 4+. Bigger disagreements were not better ones. Adding this model's own
+regression and QB tilts moved it to 48.8%, inside the margin of error and still short of the 52.4%
+break-even. Method and numbers are in <code>backtest.py</code>.</div>
 <div class="edgegrid">
-<div class="card ecard"><h3>▲ Model higher — <span class="pos">lean OVER / take</span></h3><div id="n-buy"></div></div>
-<div class="card ecard"><h3>▼ Model lower — <span class="neg">lean UNDER / fade</span></h3><div id="n-fade"></div></div></div>
+<div class="card ecard"><h3>▲ <span class="pos">Model rates higher than market</span></h3><div id="n-buy"></div></div>
+<div class="card ecard"><h3>▼ <span class="neg">Model rates lower than market</span></h3><div id="n-fade"></div></div></div>
 
 <div class="sec">Full ratings</div>
 <div class="controls"><input id="n-q" placeholder="Search team…" style="min-width:170px">
