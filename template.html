@@ -74,6 +74,11 @@ tr:hover td{background:color-mix(in srgb,var(--series1) 7%,transparent)}
 .srcs .mode{display:inline-block;min-width:64px;font-weight:700}
 .mode.live{color:var(--goodink)}.mode.cache{color:var(--series1)}.mode.fallback{color:var(--muted)}
 .view{display:none}.view.on{display:block}
+/* Builds without odds credentials carry no market data; drop the two columns
+   rather than show a table of dashes. Market line and Difference are 6th/7th
+   in both slates. */
+table.nomkt th:nth-child(6),table.nomkt td:nth-child(6),
+table.nomkt th:nth-child(7),table.nomkt td:nth-child(7){display:none}
 </style></head><body>
 <div id="bar"><b>🏈 Sports Power Ratings — 2026</b>
 <span class="seg"><button id="bcfb" class="on">College Football</button><button id="bnfl">NFL</button></span>
@@ -111,7 +116,8 @@ Where this rating diverges most from FPI is where the market is most likely soft
 <span class="legend"><span>Sortable — click a header. ± = combined rating uncertainty. Preseason tilts fade from wk 3 (measured), so later lines lean on FPI.</span></span></div>
 <div class="card" style="padding:6px 12px;max-height:560px;overflow:auto"><table id="c-sched"><thead><tr>
 <th data-sk="week">Wk</th><th class="l" data-sk="date">Date</th><th class="l" data-sk="match">Matchup</th>
-<th class="l" data-sk="site">Site</th><th class="l" data-sk="fav">Projected line</th><th data-sk="line">Line</th><th data-sk="unc">±</th>
+<th class="l" data-sk="site">Site</th><th class="l" data-sk="fav">Model line</th>
+<th class="l" data-sk="mkt">Market line</th><th class="l" data-sk="edge">Difference</th><th data-sk="unc">±</th>
 </tr></thead><tbody id="c-sb"></tbody></table></div>
 
 <div class="sec">Biggest disagreements with FPI <span style="font-weight:400;color:var(--ink2);font-size:13px">— high/medium confidence</span></div>
@@ -350,30 +356,49 @@ function schedLine(g){
  const margin=myOf(h,g.week)-myOf(a,g.week)+hfa;
  const fav=margin>=0?g.home:g.away;
  const unc=Math.round(Math.sqrt(a.band*a.band+h.band*h.band)*10)/10;
- return {fav,line:+Math.abs(margin).toFixed(1),unc};
+ return {fav,margin:+margin.toFixed(1),line:+Math.abs(margin).toFixed(1),unc};
+}
+/* g.mkt is the book's number as a home margin, positive when home is favoured.
+   Present only for games a book has actually posted — this week's slate. */
+function mktInfo(g,s){
+ if(g.mkt==null||!s) return null;
+ const diff=+(s.margin-g.mkt).toFixed(1);
+ return {fav:g.mkt>=0?g.home:g.away, line:+Math.abs(g.mkt).toFixed(1),
+  diff, side:diff>=0?g.home:g.away, pts:+Math.abs(diff).toFixed(1)};
 }
 function renderSched(){
  let rows=GAMES.filter(g=>(WK==='all'||g.week==+WK)&&(GT==='all'||g.fbs));
- if(!rows.length){$('#c-sb').innerHTML='<tr><td colspan="7" class="l" style="color:var(--muted)">Schedule unavailable this build — will populate on next successful fetch.</td></tr>';return;}
- let data=rows.map(g=>({g,s:schedLine(g)}));
+ if(!rows.length){$('#c-sb').innerHTML='<tr><td colspan="8" class="l" style="color:var(--muted)">Schedule unavailable this build — will populate on next successful fetch.</td></tr>';return;}
+ let data=rows.map(g=>({g,s:schedLine(g)})).map(x=>({...x,m:mktInfo(x.g,x.s)}));
+ const byM=(A,B,f)=>{const x=A.m?f(A.m):null,y=B.m?f(B.m):null;   // unpriced sort last
+  if(x===null&&y===null)return 0; if(x===null)return 1; if(y===null)return -1;
+  return skAsc?x-y:y-x;};
  data.sort((A,B)=>{
   if(skK==='line'){const x=A.s?A.s.line:-1,y=B.s?B.s.line:-1;return skAsc?x-y:y-x;}
+  if(skK==='mkt')return byM(A,B,m=>m.line);
+  if(skK==='edge')return byM(A,B,m=>m.pts);
   if(skK==='unc'){const x=A.s?A.s.unc:-1,y=B.s?B.s.unc:-1;return skAsc?x-y:y-x;}
   if(skK==='fav'){const x=A.s?A.s.fav:'zz',y=B.s?B.s.fav:'zz';return skAsc?x.localeCompare(y):y.localeCompare(x);}
   if(skK==='match'){return skAsc?A.g.home.localeCompare(B.g.home):B.g.home.localeCompare(A.g.home);}
   const x=A.g[skK],y=B.g[skK];if(typeof x==='string')return skAsc?x.localeCompare(y):y.localeCompare(x);
   return skAsc?x-y:y-x;});
- $('#c-sb').innerHTML=data.map(({g,s})=>{
-  const site=g.site?`<span title="${g.site}">${g.site.split('(')[0].split(',')[0].trim()}</span>`:'<span style="color:var(--muted)">—</span>';
-  let favcell,linecell,unccell;
-  if(s){favcell=`<b>${s.fav}</b> −${s.line.toFixed(1)}`;
-   linecell=`<span class="num">${s.line.toFixed(1)}</span>`;unccell=`<span class="band">±${s.unc}</span>`;}
-  else{favcell=`<span style="color:var(--muted)">FBS favorite · FCS opp</span>`;linecell='<span style="color:var(--muted)">—</span>';unccell='';}
+ const dash='<span style="color:var(--muted)">—</span>';
+ $('#c-sb').innerHTML=data.map(({g,s,m})=>{
+  const site=g.site?`<span title="${g.site}">${g.site.split('(')[0].split(',')[0].trim()}</span>`:dash;
+  let favcell,unccell;
+  if(s){favcell=`<b>${s.fav}</b> −${s.line.toFixed(1)}`;unccell=`<span class="band">±${s.unc}</span>`;}
+  else{favcell=`<span style="color:var(--muted)">FBS favorite · FCS opp</span>`;unccell='';}
+  const mkt=m?`<b>${m.fav}</b> −${m.line.toFixed(1)}`:dash;
+  const diff=m?`<span class="${m.diff>=0?'pos':'neg'}">${m.side} +${m.pts.toFixed(1)}</span>`:dash;
   return `<tr><td>${g.week}</td><td class="l" style="color:var(--ink2)">${g.date}</td>
    <td class="l">${g.away} <span style="color:var(--muted)">@</span> <b>${g.home}</b>${g.note?` <span style="color:var(--muted);font-size:11px">${g.note}</span>`:''}</td>
    <td class="l" style="color:var(--ink2);font-size:12px">${site}</td>
-   <td class="l">${favcell}</td><td>${linecell}</td><td>${unccell}</td></tr>`;}).join('');
+   <td class="l">${favcell}</td>
+   <td class="l" style="font-size:12px">${mkt}</td>
+   <td class="l" style="font-size:12px">${diff}</td>
+   <td>${unccell}</td></tr>`;}).join('');
 }
+if(!GAMES.some(g=>g.mkt!=null)) $('#c-sched').classList.add('nomkt');
 buildWeekFilter('#c-wkfilter',GAMES,w=>{WK=w;renderSched();});
 document.querySelectorAll('#c-gtype button').forEach(b=>b.addEventListener('click',()=>{
  document.querySelectorAll('#c-gtype button').forEach(x=>x.classList.remove('on'));b.classList.add('on');GT=b.dataset.g;renderSched();}));
@@ -477,6 +502,7 @@ function renderSched(){
    <td class="l" style="font-size:12px">${mkt}</td>
    <td class="l" style="font-size:12px">${diff}</td>
    <td><span class="band">±${s.unc}</span></td></tr>`;}).join('');}
+if(!GAMES.some(g=>g.mkt!=null)) $('#n-sched').classList.add('nomkt');
 buildWeekFilter('#n-wkfilter',GAMES,w=>{WK=w;renderSched();});
 document.querySelectorAll('#n-sched th').forEach(th=>th.addEventListener('click',()=>{const k=th.dataset.sk;
  if(k===skK)skAsc=!skAsc;else{skK=k;skAsc=(k==='week'||k==='date'||k==='match'||k==='fav');}renderSched();}));

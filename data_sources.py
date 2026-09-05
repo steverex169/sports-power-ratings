@@ -8,6 +8,7 @@ Optional: set CFBD_API_KEY (env var, or a `cfbd_key.txt` file next to this
 script) to pull CFB talent + returning production live from
 collegefootballdata.com instead of the bundled snapshots.
 """
+import base64
 import csv
 import datetime
 import io
@@ -149,6 +150,9 @@ ALIASES = {
     "Miami (OH)": "Miami (OH)",
     "Miami OH": "Miami (OH)",
     "Sam Houston State": "Sam Houston",
+    # Pinnacle's spellings
+    "Middle Tennessee State": "Middle Tennessee",
+    "UL Lafayette": "Louisiana",
     # ESPN abbreviated shortDisplayNames
     "Arizona St": "Arizona State",
     "Arkansas St": "Arkansas State",
@@ -306,6 +310,7 @@ def get_cfb_schedule(year, fbs_teams, weeks=None):
     weeks = list(weeks if weeks is not None else CFB_WEEKS)
     games, modes, failed, tbd, malformed = [], [], [], 0, 0
     kickoffs = []
+    market = get_pinnacle_lines("cfb")
     for wk in weeks:
         try:
             events, m = _week_events("college-football", year, wk, "&groups=80",
@@ -350,6 +355,7 @@ def get_cfb_schedule(year, fbs_teams, weeks=None):
             fbs = home in fbs_teams and away in fbs_teams
             games.append({"week": week_label, "date": date_str, "away": away,
                           "home": home, "site": site, "note": "",
+                          "mkt": market.get((home, away)),
                           "fbs": fbs, "fcs": (None if fbs else (away if home in fbs_teams else home))})
 
     # keep only games involving at least one FBS team, dedupe within each week
@@ -450,6 +456,86 @@ def _sched_detail(games, failed, tbd=0, malformed=0):
     if notes:
         detail += " (" + "; ".join(notes) + ")"
     return detail
+
+
+# ---------------- Pinnacle market lines (credentials required) ----------------
+#
+# Off unless credentials are present, which is deliberate: the public CI build
+# holds no secrets, so it publishes no licensed odds. A local or private-host
+# build with PS3838_* set gets the lines. Read from the environment or a
+# gitignored pinnacle_env.txt — never hard-coded, never committed.
+
+_PIN_SPORT_FOOTBALL = 15
+PIN_LEAGUES = {"cfb": 880, "nfl": 889}
+
+
+def _pin_env():
+    env = {k: os.environ.get(k) for k in
+           ("PS3838_BASE_URL", "PS3838_USERNAME", "PS3838_PASSWORD")}
+    path = os.path.join(BASE, "pinnacle_env.txt")
+    if os.path.exists(path):
+        for line in open(path):
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                env[k.strip()] = env.get(k.strip()) or v.strip()
+    if not (env.get("PS3838_USERNAME") and env.get("PS3838_PASSWORD")):
+        return None
+    env["PS3838_BASE_URL"] = env.get("PS3838_BASE_URL") or "https://api.probet42.com"
+    return env
+
+
+def _pin_get(env, path, **params):
+    tok = base64.b64encode(
+        f"{env['PS3838_USERNAME']}:{env['PS3838_PASSWORD']}".encode()).decode()
+    q = "&".join(f"{k}={v}" for k, v in params.items() if v is not None)
+    req = urllib.request.Request(f"{env['PS3838_BASE_URL']}{path}?{q}",
+                                 headers={"Authorization": f"Basic {tok}",
+                                          "User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=45) as r:
+        return json.load(r)
+
+
+def get_pinnacle_lines(league):
+    """{(home, away): home_margin} in project-canonical names, home-positive.
+
+    Pinnacle quotes `hdp` as the HOME handicap, so a home favourite is negative
+    there; the sign is flipped to match the rest of this codebase. Full-game
+    period only (0), open lines only (status 1), and of the offered spreads the
+    one with the most balanced juice — the main line, not an alternate.
+    """
+    env = _pin_env()
+    label = f"{league.upper()} market lines (Pinnacle)"
+    if not env:
+        _report(label, "fallback", "no credentials — set PS3838_USERNAME/PASSWORD to enable")
+        return {}
+    try:
+        lid = PIN_LEAGUES[league]
+        fx = _pin_get(env, "/v3/fixtures", sportId=_PIN_SPORT_FOOTBALL, leagueIds=lid)
+        names = {e["id"]: (e.get("home"), e.get("away"))
+                 for lg in fx.get("league", []) for e in lg.get("events", [])}
+        od = _pin_get(env, "/v4/odds", sportId=_PIN_SPORT_FOOTBALL, leagueIds=lid,
+                      oddsFormat="American")
+        out = {}
+        for lg in od.get("leagues", []):
+            for e in lg.get("events", []):
+                p0 = next((p for p in e.get("periods", [])
+                           if p.get("number") == 0 and p.get("status") == 1), None)
+                if not p0 or not p0.get("spreads") or e["id"] not in names:
+                    continue
+                main = sorted(p0["spreads"],
+                              key=lambda s: abs((s.get("home") or 0) - (s.get("away") or 0)))[0]
+                if main.get("hdp") is None:
+                    continue
+                home, away = names[e["id"]]
+                if not home or not away:
+                    continue
+                out[(canon(home), canon(away))] = -float(main["hdp"])
+        _report(label, "live", f"{len(out)} games priced")
+        return out
+    except Exception as e:  # noqa: BLE001
+        _report(label, "fallback", f"unavailable — {e}")
+        return {}
 
 
 # ---------------- NFL market lines (nflverse, free, no key) ----------------
