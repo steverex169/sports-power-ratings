@@ -45,9 +45,12 @@ rsync -az --delete -e "$SSH" \
 # Odds credentials: read from this shell's env, written server-side with 600.
 if [ -n "${PS3838_USERNAME:-}" ] && [ -n "${PS3838_PASSWORD:-}" ]; then
   echo "==> installing odds credentials on the server"
-  printf 'PS3838_BASE_URL=%s\nPS3838_USERNAME=%s\nPS3838_PASSWORD=%s\n' \
-    "${PS3838_BASE_URL:-https://api.probet42.com}" "$PS3838_USERNAME" "$PS3838_PASSWORD" \
-    | $SSH "$USER_NAME@$HOST" "cat > $APP_DIR/pinnacle_env.txt && chmod 600 $APP_DIR/pinnacle_env.txt"
+  # PS3838_PROXY is what makes the server build work at all: the book returns
+  # 403 to AWS, so the call needs a residential exit node.
+  { printf 'PS3838_BASE_URL=%s\nPS3838_USERNAME=%s\nPS3838_PASSWORD=%s\n' \
+      "${PS3838_BASE_URL:-https://api.probet42.com}" "$PS3838_USERNAME" "$PS3838_PASSWORD"
+    [ -n "${PS3838_PROXY:-}" ] && printf 'PS3838_PROXY=%s\n' "$PS3838_PROXY"
+  } | $SSH "$USER_NAME@$HOST" "cat > $APP_DIR/pinnacle_env.txt && chmod 600 $APP_DIR/pinnacle_env.txt"
 else
   echo "==> no PS3838_* in env; server will build without market lines"
 fi

@@ -471,7 +471,7 @@ PIN_LEAGUES = {"cfb": 880, "nfl": 889}
 
 def _pin_env():
     env = {k: os.environ.get(k) for k in
-           ("PS3838_BASE_URL", "PS3838_USERNAME", "PS3838_PASSWORD")}
+           ("PS3838_BASE_URL", "PS3838_USERNAME", "PS3838_PASSWORD", "PS3838_PROXY")}
     path = os.path.join(BASE, "pinnacle_env.txt")
     if os.path.exists(path):
         for line in open(path):
@@ -485,15 +485,39 @@ def _pin_env():
     return env
 
 
-def _pin_get(env, path, **params):
+def _pin_get(env, path, retries=3, **params):
+    """One API call, optionally through a residential proxy.
+
+    The book answers a residential IP and returns 403 to a datacenter one, so a
+    build running on a server needs an exit node that isn't AWS — set
+    PS3838_PROXY. Residential exits are unreliable by nature: an individual
+    call can come back as a 504 on the CONNECT tunnel and succeed on the
+    retry, so transient failures are retried. 401/403 are not retried, because
+    those are a refusal rather than a flake and hammering them helps nobody.
+    """
     tok = base64.b64encode(
         f"{env['PS3838_USERNAME']}:{env['PS3838_PASSWORD']}".encode()).decode()
     q = "&".join(f"{k}={v}" for k, v in params.items() if v is not None)
     req = urllib.request.Request(f"{env['PS3838_BASE_URL']}{path}?{q}",
                                  headers={"Authorization": f"Basic {tok}",
                                           "User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(req, timeout=45) as r:
-        return json.load(r)
+    proxy = env.get("PS3838_PROXY")
+    opener = (urllib.request.build_opener(
+                  urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
+              if proxy else urllib.request.build_opener())
+    last = None
+    for attempt in range(retries):
+        try:
+            with opener.open(req, timeout=60) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 403):
+                raise
+            last = e
+        except Exception as e:  # noqa: BLE001 — tunnel drops, resets, timeouts
+            last = e
+        time.sleep(1 + attempt)
+    raise last
 
 
 def get_pinnacle_lines(league):
@@ -531,7 +555,8 @@ def get_pinnacle_lines(league):
                 if not home or not away:
                     continue
                 out[(canon(home), canon(away))] = -float(main["hdp"])
-        _report(label, "live", f"{len(out)} games priced")
+        _report(label, "live", f"{len(out)} games priced"
+                + (" via proxy" if env.get("PS3838_PROXY") else ""))
         return out
     except Exception as e:  # noqa: BLE001
         _report(label, "fallback", f"unavailable — {e}")
