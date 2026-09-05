@@ -8,7 +8,9 @@ Optional: set CFBD_API_KEY (env var, or a `cfbd_key.txt` file next to this
 script) to pull CFB talent + returning production live from
 collegefootballdata.com instead of the bundled snapshots.
 """
+import csv
 import datetime
+import io
 import json
 import os
 import socket
@@ -105,6 +107,27 @@ def http_get_json(url, cache_name, headers=None, retries=2):
             blob = json.load(f)
         age_h = (time.time() - blob.get("fetched_at", 0)) / 3600
         return blob["data"], f"cache ({age_h:.0f}h old)"
+    raise RuntimeError(f"{cache_name}: fetch failed and no cache — {last_err}")
+
+
+def http_get_text(url, cache_name, headers=None, retries=2):
+    """Text sibling of http_get_json — live, else the cached copy at any age."""
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", **(headers or {})})
+    path = os.path.join(CACHE_DIR, cache_name)
+    last_err = None
+    for attempt in range(retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                text = r.read().decode(errors="replace")
+            with open(path, "w") as f:
+                f.write(text)
+            return text, "live"
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            time.sleep(1 + attempt)
+    if os.path.exists(path):
+        age_h = (time.time() - os.path.getmtime(path)) / 3600
+        return open(path).read(), f"cache ({age_h:.0f}h old)"
     raise RuntimeError(f"{cache_name}: fetch failed and no cache — {last_err}")
 
 
@@ -354,6 +377,7 @@ def get_nfl_schedule(year, weeks=None):
     """Full NFL regular season, one fetch per week."""
     weeks = list(weeks if weeks is not None else NFL_WEEKS)
     games, modes, failed, kickoffs, malformed = [], [], [], [], 0
+    market = get_nfl_market_lines(year)
     for wk in weeks:
         try:
             events, m = _week_events("nfl", year, wk, "", f"nfl_sched_w{wk}")
@@ -366,13 +390,14 @@ def get_nfl_schedule(year, weeks=None):
             if not comp or not comp.get("competitors"):
                 malformed += 1
                 continue
-            home = away = None
+            home = away = home_ab = away_ab = None
             for c in comp["competitors"]:
-                nm = c.get("team", {}).get("displayName")
+                t = c.get("team", {})
+                nm, ab = t.get("displayName"), t.get("abbreviation")
                 if c.get("homeAway") == "home":
-                    home = nm
+                    home, home_ab = nm, ab
                 else:
-                    away = nm
+                    away, away_ab = nm, ab
             if not home or not away:
                 continue
             if not ev.get("date"):
@@ -387,7 +412,10 @@ def get_nfl_schedule(year, weeks=None):
                     or v.get("fullName", "Neutral site")
             kickoffs.append((wk, datetime.datetime.fromisoformat(
                 ev["date"].replace("Z", "+00:00"))))
-            games.append({"week": wk, "date": date_str, "away": away, "home": home, "site": site})
+            spread = market.get((wk, NV_ABBR.get(home_ab, home_ab),
+                                 NV_ABBR.get(away_ab, away_ab)))
+            games.append({"week": wk, "date": date_str, "away": away, "home": home,
+                          "site": site, "mkt": spread})
 
     WEEK_ENDS["nfl"] = _week_ends(kickoffs)
     CURRENT_WEEK["nfl"] = _current_week(WEEK_ENDS["nfl"])
@@ -422,6 +450,42 @@ def _sched_detail(games, failed, tbd=0, malformed=0):
     if notes:
         detail += " (" + "; ".join(notes) + ")"
     return detail
+
+
+# ---------------- NFL market lines (nflverse, free, no key) ----------------
+
+_NFLVERSE_GAMES = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv"
+
+# ESPN abbreviation -> nflverse abbreviation (the only two that differ)
+NV_ABBR = {"LAR": "LA", "WSH": "WAS"}
+
+
+def get_nfl_market_lines(year):
+    """{(week, home_abbr, away_abbr): spread} for `year`, home-positive.
+
+    nflverse carries the number for games that are already priced and leaves it
+    blank for the rest, so later weeks fill in as books post them.
+    """
+    try:
+        text, mode = http_get_text(_NFLVERSE_GAMES, "nflverse_games.csv")
+    except Exception as e:  # noqa: BLE001
+        _report("NFL market lines (nflverse)", "fallback", f"unavailable — {e}")
+        return {}
+    lines, scheduled = {}, 0
+    for r in csv.DictReader(io.StringIO(text)):
+        if r.get("season") != str(year) or r.get("game_type") != "REG":
+            continue
+        scheduled += 1
+        if not r.get("spread_line"):
+            continue
+        try:
+            lines[(int(r["week"]), r["home_team"], r["away_team"])] = float(r["spread_line"])
+        except ValueError:
+            continue
+    _report("NFL market lines (nflverse)", "live" if mode == "live" else "cache",
+            f"{len(lines)} of {scheduled} games priced"
+            + ("" if mode == "live" else f", {mode}"))
+    return lines
 
 
 # ---------------- CFBD (optional, key required) ----------------
