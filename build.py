@@ -90,6 +90,7 @@ def main():
         html = f.read()
 
     updated = datetime.datetime.now().strftime("%b %d, %Y %H:%M")
+    built_iso = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     j = lambda x: json.dumps(x, ensure_ascii=False)
     html = (html
             .replace("__CFB_DATA__", j(models.cfb_rows_for_dashboard(cfb_df)))
@@ -99,7 +100,8 @@ def main():
             .replace("__SOURCES__", j(ds.SOURCES))
             .replace("__CUR_WK_CFB__", j(ds.CURRENT_WEEK.get("cfb")))
             .replace("__CUR_WK_NFL__", j(ds.CURRENT_WEEK.get("nfl")))
-            .replace("__UPDATED__", updated))
+            .replace("__UPDATED__", updated)
+            .replace("__BUILT_ISO__", built_iso))
 
     out = os.path.join(BASE, "index.html")
     with open(out, "w", encoding="utf-8") as f:
