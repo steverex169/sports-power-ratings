@@ -26,9 +26,13 @@ os.makedirs(CACHE_DIR, exist_ok=True)
 # Build report: list of dicts {source, mode, detail} — mode: live | cache | fallback
 SOURCES = []
 
-# Which week each league is currently in, derived from kickoff times while the
-# schedule is fetched. Preseason -> the first week; season over -> last week + 1.
-CURRENT_WEEK = {}
+# When each league's weeks finish, derived from kickoff times while the schedule
+# is fetched: {league: [[week, last_kickoff_iso], ...]}. The dashboard resolves
+# the current week from this in the browser, so it stays right between weekly
+# rebuilds — a build-time constant would go stale within a day, since a week is
+# not over until its last game (Monday night in the NFL) has kicked off.
+WEEK_ENDS = {}
+CURRENT_WEEK = {}   # same answer at build time, for the build log
 
 
 def _report(source, mode, detail=""):
@@ -241,13 +245,26 @@ _TBD = {"TBD", "TBA"}
 NFL_WEEKS = tuple(range(1, 19))
 
 
-def _current_week(kickoffs):
-    """kickoffs: [(week_label, kickoff_utc)] -> week now being played / next up."""
-    if not kickoffs:
+def _week_ends(kickoffs):
+    """kickoffs: [(week_label, kickoff_utc)] -> [[week, last_kickoff_iso], ...]."""
+    last = {}
+    for w, k in kickoffs:
+        if w not in last or k > last[w]:
+            last[w] = k
+    return [[w, last[w].astimezone(datetime.timezone.utc)
+             .isoformat(timespec="seconds").replace("+00:00", "Z")]
+            for w in sorted(last)]
+
+
+def _current_week(week_ends):
+    """The first week whose last game has not yet kicked off."""
+    if not week_ends:
         return None
     now = datetime.datetime.now(datetime.timezone.utc)
-    upcoming = [w for w, k in kickoffs if k >= now]
-    return min(upcoming) if upcoming else max(w for w, _ in kickoffs) + 1
+    for wk, iso in week_ends:
+        if datetime.datetime.fromisoformat(iso.replace("Z", "+00:00")) >= now:
+            return wk
+    return week_ends[-1][0] + 1
 
 
 def _week_events(league, year, wk, extra, cache_name):
@@ -322,7 +339,8 @@ def get_cfb_schedule(year, fbs_teams, weeks=None):
             out.append(g)
     games = out
 
-    CURRENT_WEEK["cfb"] = _current_week(kickoffs)
+    WEEK_ENDS["cfb"] = _week_ends(kickoffs)
+    CURRENT_WEEK["cfb"] = _current_week(WEEK_ENDS["cfb"])
     if not games:
         _report("CFB schedule (ESPN)", "fallback", f"unavailable — {_span(weeks)} all failed")
         return []
@@ -371,7 +389,8 @@ def get_nfl_schedule(year, weeks=None):
                 ev["date"].replace("Z", "+00:00"))))
             games.append({"week": wk, "date": date_str, "away": away, "home": home, "site": site})
 
-    CURRENT_WEEK["nfl"] = _current_week(kickoffs)
+    WEEK_ENDS["nfl"] = _week_ends(kickoffs)
+    CURRENT_WEEK["nfl"] = _current_week(WEEK_ENDS["nfl"])
     if not games:
         _report("NFL schedule (ESPN)", "fallback", f"unavailable — {_span(weeks)} all failed")
         return []

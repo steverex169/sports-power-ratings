@@ -200,7 +200,15 @@ const CFB_GAMES=__CFB_GAMES__;
 const NFL_DATA=__NFL_DATA__;
 const NFL_GAMES=__NFL_GAMES__;
 const SOURCES=__SOURCES__;
-const CUR_WK={cfb:__CUR_WK_CFB__,nfl:__CUR_WK_NFL__};
+/* [[week, last kickoff]] per league. The current week is resolved here rather
+   than baked in at build time: a week is not over until its last game starts,
+   so a constant stamped on Monday morning would still name the outgoing week
+   for the six days that follow. */
+const WEEK_ENDS={cfb:__WEEK_ENDS_CFB__,nfl:__WEEK_ENDS_NFL__};
+function currentWeek(lg){
+ const ws=WEEK_ENDS[lg]||[],now=Date.now();
+ for(const [w,iso] of ws) if(new Date(iso).getTime()>=now) return w;
+ return ws.length?ws[ws.length-1][0]+1:null;}
 const BUILT_ISO="__BUILT_ISO__";
 const REGW={C:0.7,B:1.0,A:1.4};
 /* Preseason tilts (talent, portal, returning production, prior-year regression)
@@ -245,9 +253,9 @@ function freshness(view){
  const stale=mins>8*1440;
  $('#freshtxt').textContent=`Updated ${rel}`;
  $('#freshdot').classList.toggle('stale',stale);
- const wk=CUR_WK[view];
- $('#freshmeta').textContent=(wk!=null?`· Week ${wk} `:'')
-   +(stale?'· rebuild overdue':'· rebuilds every Monday');
+ const ws=WEEK_ENDS[view]||[],last=ws.length?ws[ws.length-1][0]:null,wk=currentWeek(view);
+ const wkTxt=(wk==null||last==null)?'':(wk>last?'· season complete ':`· Week ${wk} `);
+ $('#freshmeta').textContent=wkTxt+(stale?'· rebuild overdue':'· rebuilds every Monday');
  $('#note').title=`Built ${built.toLocaleString()}. Rebuilds automatically every Monday `
    +`and on every push; data is fetched live from ESPN at build time.`;}
 
@@ -262,7 +270,7 @@ freshness('cfb');
 const DATA=CFB_DATA, GAMES=CFB_GAMES;
 let REG='B';
 const TILT=d=>(d.tt||0)+(d.padj||0)+(d.rpadj||0);
-const myOf=(d,wk)=>+(d.fpi+REGW[REG]*decay('cfb',wk===undefined?CUR_WK.cfb:wk)*TILT(d)).toFixed(1);
+const myOf=(d,wk)=>+(d.fpi+REGW[REG]*decay('cfb',wk===undefined?currentWeek('cfb'):wk)*TILT(d)).toFixed(1);
 const edgeOf=d=>+(myOf(d)-d.fpi).toFixed(1);
 const MAXE=6;
 $('#c-count').textContent=DATA.length+' FBS';
@@ -381,7 +389,7 @@ autoHFA();calc();panels();render();renderSched();
 const DATA=NFL_DATA, GAMES=NFL_GAMES;
 let REG='B';
 const TILT=d=>(d.reg||0)+(d.qb||0)+(d.ros||0);
-const myOf=(d,wk)=>+(d.fpi+REGW[REG]*decay('nfl',wk===undefined?CUR_WK.nfl:wk)*TILT(d)).toFixed(1);
+const myOf=(d,wk)=>+(d.fpi+REGW[REG]*decay('nfl',wk===undefined?currentWeek('nfl'):wk)*TILT(d)).toFixed(1);
 const edgeOf=d=>+(myOf(d)-d.mkt).toFixed(1);
 const MAXE=3.5;
 const byRank=[...DATA].sort((a,b)=>a.rank-b.rank);

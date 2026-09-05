@@ -98,8 +98,8 @@ def main():
             .replace("__NFL_DATA__", j(models.nfl_rows_for_dashboard(nfl_df)))
             .replace("__NFL_GAMES__", j(nfl_games))
             .replace("__SOURCES__", j(ds.SOURCES))
-            .replace("__CUR_WK_CFB__", j(ds.CURRENT_WEEK.get("cfb")))
-            .replace("__CUR_WK_NFL__", j(ds.CURRENT_WEEK.get("nfl")))
+            .replace("__WEEK_ENDS_CFB__", j(ds.WEEK_ENDS.get("cfb", [])))
+            .replace("__WEEK_ENDS_NFL__", j(ds.WEEK_ENDS.get("nfl", [])))
             .replace("__UPDATED__", updated)
             .replace("__BUILT_ISO__", built_iso))
 
