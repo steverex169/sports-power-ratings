@@ -52,7 +52,13 @@ if [ -n "${PS3838_USERNAME:-}" ] && [ -n "${PS3838_PASSWORD:-}" ]; then
     [ -n "${PS3838_PROXY:-}" ] && printf 'PS3838_PROXY=%s\n' "$PS3838_PROXY"
   } | $SSH "$USER_NAME@$HOST" "cat > $APP_DIR/pinnacle_env.txt && chmod 600 $APP_DIR/pinnacle_env.txt"
 else
-  echo "==> no PS3838_* in env; server will build without market lines"
+  # rsync excludes pinnacle_env.txt, so whatever the server already holds
+  # survives a redeploy. Only say "no lines" if there really is nothing there.
+  if $SSH "$USER_NAME@$HOST" "test -s $APP_DIR/pinnacle_env.txt"; then
+    echo "==> no PS3838_* in env; keeping the credentials already on the server"
+  else
+    echo "==> no PS3838_* in env and none on the server; build will carry no CFB market lines"
+  fi
 fi
 
 echo "==> provisioning"
