@@ -18,6 +18,7 @@ sys.path.insert(0, BASE)
 
 import data_sources as ds
 import fallback_data as fb
+import keynumbers
 import models
 
 
@@ -85,6 +86,13 @@ def main():
     cfb_df.to_csv(os.path.join(BASE, "cfb_ratings_v2.csv"), index=False)
     nfl_df.to_csv(os.path.join(BASE, "nfl_ratings.csv"), index=False)
 
+    # 15 completed seasons of closing lines; the current one is excluded so the
+    # tables describe finished games only.
+    key_numbers = keynumbers.compute(set(range(year - 16, year)))
+    if key_numbers:
+        print(f"  Key numbers: {key_numbers['games']} NFL games, "
+              f"{key_numbers['years'][0]}-{key_numbers['years'][1]}")
+
     print("Building dashboard…")
     with open(os.path.join(BASE, "template.html"), encoding="utf-8") as f:
         html = f.read()
@@ -100,6 +108,7 @@ def main():
             .replace("__SOURCES__", j(ds.SOURCES))
             .replace("__WEEK_ENDS_CFB__", j(ds.WEEK_ENDS.get("cfb", [])))
             .replace("__WEEK_ENDS_NFL__", j(ds.WEEK_ENDS.get("nfl", [])))
+            .replace("__KEY_NUMBERS__", j(key_numbers))
             .replace("__UPDATED__", updated)
             .replace("__BUILT_ISO__", built_iso))
 

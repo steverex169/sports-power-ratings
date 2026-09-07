@@ -179,6 +179,17 @@ The headline number is <b>model vs. the win-total market</b> — where the softe
 <th class="l" data-sk="fav">Model line</th><th class="l" data-sk="mkt">Market line</th>
 <th class="l" data-sk="edge">Difference</th><th data-sk="unc">±</th></tr></thead><tbody id="n-sb"></tbody></table></div>
 
+<div class="sec">Key numbers <span style="font-weight:400;color:var(--ink2);font-size:13px" id="kn-sub">— where NFL games actually land</span></div>
+<div class="measured" id="kn-note"></div>
+<div class="edgegrid">
+<div class="card ecard"><h3>Final margin — share of all games</h3><div id="kn-margins"></div></div>
+<div class="card ecard"><h3>Spread is N — push rate is what the half-point is worth</h3>
+<table id="kn-push" style="font-size:12px"><thead><tr><th>Spread</th><th>Games</th><th>Push</th><th>Fav ±1</th><th>Fav ±3</th></tr></thead><tbody></tbody></table></div>
+</div>
+<div class="card ecard" style="margin-top:16px"><h3>Spread is N — where the favorite actually finishes</h3>
+<div id="kn-landing"></div>
+<div style="color:var(--muted);font-size:11px;margin-top:8px">Favorite's final margin. Boxed = a push. A negative number means the dog won outright by that much.</div></div>
+
 <div class="sec">Biggest disagreements with the win-total market</div>
 <div class="measured"><b>These are questions, not signals.</b> Replaying 816 games (2023-25) against closing
 lines with point-in-time ratings, FPI's disagreements with the number went <b>383-414 (48.1%)</b> — and
@@ -208,6 +219,7 @@ const CFB_GAMES=__CFB_GAMES__;
 const NFL_DATA=__NFL_DATA__;
 const NFL_GAMES=__NFL_GAMES__;
 const SOURCES=__SOURCES__;
+const KEY_NUMBERS=__KEY_NUMBERS__;
 /* [[week, last kickoff]] per league. The current week is resolved here rather
    than baked in at build time: a week is not over until its last game starts,
    so a constant stamped on Monday morning would still name the outgoing week
@@ -272,6 +284,36 @@ function renderSources(el){
   `<span class="mode ${s.mode.split(' ')[0]}">${s.mode.split(' ')[0]}</span> ${s.source}${s.detail?' — '+s.detail:''}`).join('<br>');}
 renderSources($('#c-srcs'));renderSources($('#n-srcs'));
 freshness('cfb');
+
+/* Key numbers — computed at build time from 15 seasons of nflverse closing
+   lines and final scores (keynumbers.py). Favourite-centric: "favoured by 7,
+   won by 9" is +2 against the number. */
+(function(){
+ const K=KEY_NUMBERS; if(!K||!K.games) return;
+ $('#kn-sub').textContent=`— where NFL games actually land, ${K.years[0]}–${K.years[1]} closing lines, ${K.games.toLocaleString()} games`;
+ const m3=K.margins.find(r=>r.margin===3),m7=K.margins.find(r=>r.margin===7);
+ const p3=K.pushes.find(r=>r.spread===3),p7=K.pushes.find(r=>r.spread===7),p4=K.pushes.find(r=>r.spread===4);
+ const dSmall=K.distance[0],dBig=K.distance.find(r=>r.bucket.startsWith('10.5'));
+ $('#kn-note').innerHTML=`<b>3 is the number.</b> It is the final margin in ${m3?m3.pct:'?'}% of all games — `
+  +`nearly double the next one (7 at ${m7?m7.pct:'?'}%). When the spread <i>is</i> 3 it pushes ${p3?p3.push:'?'}% of the time; `
+  +`at 7 it pushes ${p7?p7.push:'?'}%; at 4 only ${p4?p4.push:'?'}%, so the hook off 4 is nearly worthless. `
+  +`Small spreads are stickier: with the line at 1–3 the game finishes within 3 of the number ${dSmall?dSmall.within3:'?'}% of the time, `
+  +`against ${dBig?dBig.within3:'?'}% when the line is 10.5–14. Read the Difference column with this in mind — a point off the book matters at 3, far less at 4.`;
+ const mx=Math.max(...K.margins.map(r=>r.pct));
+ $('#kn-margins').innerHTML=K.margins.slice(0,10).map(r=>`<div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px">
+  <span style="width:26px;text-align:right;font-weight:700">${r.margin}</span>
+  <span style="flex:1;background:var(--grid);border-radius:3px;height:10px;overflow:hidden"><span style="display:block;width:${r.pct/mx*100}%;height:100%;background:var(--series1)"></span></span>
+  <span style="width:46px;text-align:right;color:var(--ink2)">${r.pct}%</span></div>`).join('');
+ $('#kn-push tbody').innerHTML=K.pushes.filter(r=>r.spread<=14).map(r=>{
+  const hot=r.push>=6;
+  return `<tr><td style="font-weight:700">${r.spread}</td><td style="color:var(--ink2)">${r.n}</td>
+   <td class="${hot?'pos':''}" style="font-weight:${hot?700:400}">${r.push}%</td><td>${r.within1}%</td><td>${r.within3}%</td></tr>`;}).join('');
+ $('#kn-landing').innerHTML=Object.entries(K.landing).map(([sp,L])=>`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--grid)">
+  <span style="width:88px;font-weight:700">spread ${sp}</span><span style="color:var(--muted);font-size:11px;width:70px">${L.n} games</span>`
+  +L.spots.map(s=>{const push=s.margin===+sp;
+   return `<span style="font-size:12px;padding:2px 8px;border-radius:6px;${push?'border:1.5px solid var(--series1);font-weight:700;':'background:var(--chip);'}">${s.margin>0?'+':''}${s.margin} <span style="color:var(--ink2)">${s.pct}%</span></span>`;}).join('')
+  +`</div>`).join('');
+})();
 
 /* ==================== CFB ==================== */
 (function(){
