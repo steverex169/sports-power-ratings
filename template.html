@@ -165,10 +165,13 @@ Where this rating diverges most from FPI is where the market is most likely soft
 </tr></thead><tbody id="c-sb"></tbody></table></div>
 
 <div class="sec">Biggest disagreements with FPI <span style="font-weight:400;color:var(--ink2);font-size:13px">— high/medium confidence</span></div>
-<div class="measured"><b>These are questions, not signals.</b> This model has never been scored against a
-college betting market — no free source of historical CFB closing lines exists. In the NFL, where it could be
-tested, disagreements of exactly this kind went <b>48.1%</b> against the closing line over 816 games (2023-25),
-losing at every margin tested, and break-even is 52.4%. Nothing here has been shown to beat a number.</div>
+<div class="measured"><b>These are questions, not signals.</b> College can now be scored against a market:
+a CFBD key carries historical closing lines, and replaying <b>2,260 games</b> (2023-25) with point-in-time
+FPI put these disagreements at <b>50.7%</b> against the number — 49.9% at 2+ points, 51.2% at 4+, flat at
+every margin and never clearing the 52.4% break-even. The closing line also predicted the games better than
+the rating did (11.96 vs 12.33 points of error per game). The NFL half lands in the same place at 48.1% over
+816 games. Method in <code>cfbluck.py</code> and <code>backtest.py</code>. Nothing here has been shown to
+beat a number.</div>
 <div class="edgegrid">
 <div class="card ecard"><h3>▲ <span class="pos">Model rates higher than FPI</span></h3><div id="c-buy"></div></div>
 <div class="card ecard"><h3>▼ <span class="neg">Model rates lower than FPI</span></h3><div id="c-fade"></div></div></div>
@@ -433,7 +436,8 @@ function playRowHTML(r){
 const PLAY_NOTE=`<b>Ranked by strength, not by size.</b> Edge is the model's number minus the book's, on the side it likes. `
  +`The scale peaks at 3\u20135 points and is discounted past 7 on purpose \u2014 replaying 816 NFL games against closing lines `
  +`(<code>backtest.py</code>), disagreements of 4+ points went <b>42.9%</b> while the whole set went <b>48.1%</b>, so past a touchdown a `
- +`disagreement is more often a stale injury than a soft number. Break-even at -110 is <b>52.4%</b>, and nothing here has cleared it yet \u2014 `
+ +`disagreement is more often a stale injury than a soft number. Break-even at -110 is <b>52.4%</b>, and nothing here has cleared it \u2014 `
+ +`replayed against closing lines these disagreements went 48.1% in the NFL (816 games) and 50.7% in college (2,260 games) \u2014 `
  +`these are the strongest disagreements, not proven winners.`;
 
 const $=s=>document.querySelector(s);
