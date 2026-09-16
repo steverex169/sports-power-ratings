@@ -678,14 +678,24 @@ def get_cfb_talent(year):
     key = _cfbd_key()
     if key:
         try:
-            data, m = http_get_json(
-                f"https://api.collegefootballdata.com/talent?year={year - 1}",
-                "cfbd_talent", headers={"Authorization": f"Bearer {key}"})
-            talent = {canon(d["school"]): float(d["talent"]) for d in data}
-            if talent:
-                _report("Talent composite (CFBD)", "live" if m == "live" else "cache",
-                        f"{len(talent)} teams")
-                return talent
+            # The current cycle's composite is the right input for rating the
+            # current season. It appears once that cycle closes, so the prior
+            # year is the fallback while it is still missing rather than the
+            # default it used to be.
+            for yr in (year, year - 1):
+                data, m = http_get_json(
+                    f"https://api.collegefootballdata.com/talent?year={yr}",
+                    f"cfbd_talent_{yr}", headers={"Authorization": f"Bearer {key}"})
+                # CFBD renamed this field from `school` to `team`; accept either
+                # so the build survives the rename in both directions.
+                talent = {canon(d.get("team") or d.get("school")): float(d["talent"])
+                          for d in data
+                          if d.get("talent") is not None and (d.get("team") or d.get("school"))}
+                if talent:
+                    _report("Talent composite (CFBD)",
+                            "live" if m == "live" else "cache",
+                            f"{len(talent)} teams, {yr} composite")
+                    return talent
         except Exception as e:
             _report("Talent composite (CFBD)", "fallback", str(e))
             return dict(fb.CFB_TALENT)
