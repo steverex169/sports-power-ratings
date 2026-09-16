@@ -14,11 +14,25 @@ KEY="${KEY:-$HOME/Downloads/joesmodel.pem}"
 HOST="${HOST:?set HOST to the instance public IP or DNS}"
 USER_NAME="${USER_NAME:-ubuntu}"
 SITE=/var/www/powerratings/index.html
+APP_DIR=/opt/powerratings
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Credentials from the environment, or the odds-feed project's .env next door.
 if [ -z "${PS3838_USERNAME:-}" ] && [ -f "$HOME/PycharmProjects/odds feed/.env" ]; then
   set -a; . "$HOME/PycharmProjects/odds feed/.env"; set +a
+fi
+
+# One record, not two. The weekly rebuild on the server appends to its own
+# ledger, so a local build has to continue that file rather than start a rival
+# copy — otherwise the page shipped from here would report a different history
+# than the page the server builds on Monday.
+echo "==> pulling the server's ledger"
+mkdir -p "$HERE/data"
+if scp -q -i "$KEY" -o StrictHostKeyChecking=accept-new \
+     "$USER_NAME@$HOST:$APP_DIR/data/ledger.json" "$HERE/data/ledger.json" 2>/dev/null; then
+  echo "    got it"
+else
+  echo "    none on the server yet — starting one"
 fi
 
 echo "==> building locally"
@@ -40,4 +54,9 @@ fi
 echo "==> shipping to $HOST"
 scp -q -i "$KEY" -o StrictHostKeyChecking=accept-new "$HERE/index.html" "$USER_NAME@$HOST:/tmp/index.html"
 ssh -i "$KEY" "$USER_NAME@$HOST" "sudo install -m 644 -o $USER_NAME -g $USER_NAME /tmp/index.html $SITE && rm -f /tmp/index.html && ls -l $SITE"
+
+echo "==> pushing the ledger back"
+scp -q -i "$KEY" "$HERE/data/ledger.json" "$USER_NAME@$HOST:/tmp/ledger.json"
+ssh -i "$KEY" "$USER_NAME@$HOST" \
+  "install -m 644 /tmp/ledger.json $APP_DIR/data/ledger.json && rm -f /tmp/ledger.json"
 echo "==> done"

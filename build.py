@@ -19,7 +19,9 @@ sys.path.insert(0, BASE)
 import data_sources as ds
 import fallback_data as fb
 import keynumbers
+import ledger
 import models
+import playrules
 
 
 def parse_weeks(spec, default):
@@ -93,22 +95,47 @@ def main():
         print(f"  Key numbers: {key_numbers['games']} NFL games, "
               f"{key_numbers['years'][0]}-{key_numbers['years'][1]}")
 
+    updated = datetime.datetime.now().strftime("%b %d, %Y %H:%M")
+    built_iso = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+    cfb_rows = models.cfb_rows_for_dashboard(cfb_df)
+    nfl_rows = models.nfl_rows_for_dashboard(nfl_df)
+
+    # The record. Plays are written down at first sighting and never recomputed,
+    # so a later build can grade them but cannot quietly improve them.
+    print("Updating ledger…")
+    led = ledger.load()
+    added = 0
+    for lg, games, rows in (("cfb", cfb_games, cfb_rows), ("nfl", nfl_games, nfl_rows)):
+        # Only games kicking off within the week: a line seen eleven days out
+        # is not a number anyone could have taken.
+        plays = playrules.build_plays(lg, games, rows, horizon_days=7)
+        added += ledger.record(led, lg, plays, built_iso)
+    graded = ledger.grade(led, year, ds.get_results)
+    ledger.save(led)
+    tracker = ledger.summary(led)
+    print(f"  {added} new play(s) recorded, {graded} newly graded | "
+          f"{tracker['graded']} graded, {tracker['pending']} pending")
+    if tracker["overall"]["n"]:
+        o = tracker["overall"]
+        print(f"  Standing record: {o['w']}-{o['l']} ({o['pct']}%) "
+              f"vs {tracker['break_even']}% break-even")
+
     print("Building dashboard…")
     with open(os.path.join(BASE, "template.html"), encoding="utf-8") as f:
         html = f.read()
 
-    updated = datetime.datetime.now().strftime("%b %d, %Y %H:%M")
-    built_iso = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     j = lambda x: json.dumps(x, ensure_ascii=False)
     html = (html
-            .replace("__CFB_DATA__", j(models.cfb_rows_for_dashboard(cfb_df)))
+            .replace("__CFB_DATA__", j(cfb_rows))
             .replace("__CFB_GAMES__", j(cfb_games))
-            .replace("__NFL_DATA__", j(models.nfl_rows_for_dashboard(nfl_df)))
+            .replace("__NFL_DATA__", j(nfl_rows))
             .replace("__NFL_GAMES__", j(nfl_games))
             .replace("__SOURCES__", j(ds.SOURCES))
             .replace("__WEEK_ENDS_CFB__", j(ds.WEEK_ENDS.get("cfb", [])))
             .replace("__WEEK_ENDS_NFL__", j(ds.WEEK_ENDS.get("nfl", [])))
             .replace("__KEY_NUMBERS__", j(key_numbers))
+            .replace("__PLAY_RULES__", j(playrules.rules_for_page()))
+            .replace("__TRACKER__", j(tracker))
             .replace("__UPDATED__", updated)
             .replace("__BUILT_ISO__", built_iso))
 
@@ -121,7 +148,7 @@ def main():
         return f"{len(games)} {label} games across {wks} week{'s' if wks != 1 else ''}"
     print(f"Slate: {slate('CFB', cfb_games)}, {slate('NFL', nfl_games)}")
     print(f"Current week: CFB {ds.CURRENT_WEEK.get('cfb')}, NFL {ds.CURRENT_WEEK.get('nfl')}")
-    print("Saved: cfb_ratings_v2.csv, nfl_ratings.csv")
+    print(f"Saved: cfb_ratings_v2.csv, nfl_ratings.csv, {os.path.relpath(ledger.PATH, BASE)}")
 
     if args.open:
         subprocess.run(["open", out], check=False)

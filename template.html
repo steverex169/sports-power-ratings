@@ -70,6 +70,36 @@ tr:hover td{background:color-mix(in srgb,var(--series1) 7%,transparent)}
 .qbY,.up{background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--goodink)}
 .qbT{background:var(--chip);color:var(--ink2)}
 .qbN,.dn{background:color-mix(in srgb,var(--crit) 16%,transparent);color:var(--crit)}
+/* Big plays. A game the rules decline is dimmed rather than dropped, so a G5
+   number the model loves still reads as considered-and-declined. */
+.plays{display:flex;flex-direction:column}
+.play{display:grid;grid-template-columns:92px 1fr auto;gap:12px;align-items:center;padding:10px 2px;border-bottom:1px solid var(--grid)}
+.play:last-child{border-bottom:0}
+.play.nobet{opacity:.5}
+.stars{font-size:13px;letter-spacing:1.5px;color:var(--series1);white-space:nowrap}
+.stars .off{color:var(--base)}
+.pside{font-weight:700;font-size:15px}
+.pmeta{color:var(--ink2);font-size:12px;margin-top:2px}
+.pnum{text-align:right;font-variant-numeric:tabular-nums}
+.ptag{font-size:10px;padding:2px 7px;border-radius:20px;font-weight:700}
+.t-play{background:color-mix(in srgb,var(--good) 20%,transparent);color:var(--goodink)}
+.t-strong{background:color-mix(in srgb,var(--series1) 18%,transparent);color:var(--series1)}
+.t-lean{background:var(--chip);color:var(--ink2)}
+.t-trap{background:color-mix(in srgb,var(--crit) 16%,transparent);color:var(--crit)}
+.t-nobet{background:var(--chip);color:var(--muted)}
+.keyx{font-size:10px;padding:1px 6px;border-radius:4px;background:color-mix(in srgb,var(--series1) 14%,transparent);color:var(--series1);font-weight:700;margin-left:6px}
+.pempty{color:var(--muted);padding:14px 2px}
+/* The record. Break-even is drawn on every percentage rather than left implied:
+   a 63% that reads as good at a glance is a coin flip at n=27. */
+.reccards{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px}
+.reccard{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.reccard .lab{font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reccard .val{font-size:22px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;margin:2px 0}
+.reccard .pct{font-size:12px;font-weight:700}
+.res{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:6px}
+.res-W{background:color-mix(in srgb,var(--good) 20%,transparent);color:var(--goodink)}
+.res-L{background:color-mix(in srgb,var(--crit) 16%,transparent);color:var(--crit)}
+.res-Push{background:var(--chip);color:var(--muted)}
 .srcs{margin-top:14px}
 .srcs .mode{display:inline-block;min-width:64px;font-weight:700}
 .mode.live{color:var(--goodink)}.mode.cache{color:var(--series1)}.mode.fallback{color:var(--muted)}
@@ -93,6 +123,20 @@ table.nomkt th:nth-child(7),table.nomkt td:nth-child(7){display:none}
 Where this rating diverges most from FPI is where the market is most likely soft.</p>
 <span class="tag">Base: FPI (live)</span><span class="tag">Talent: 247</span><span class="tag">Portal: On3 net</span>
 <span class="tag">Ret. production: SP+/CBS</span><span class="tag" id="c-count"></span>
+
+<div class="sec">Big plays <span id="c-pwk" style="font-weight:400;color:var(--ink2);font-size:13px"></span></div>
+<div class="measured" id="c-pnote"></div>
+<div class="controls" style="margin-top:0">
+<span class="seg" id="c-pfilter"><button data-p="rec" class="on">Recommended only</button><button data-p="all">Include G5 no-bets</button></span>
+<span class="legend"><span>Bettable = the book's number inside 17. Play = at least a point off it.</span></span></div>
+<div class="card"><div class="plays" id="c-plays"></div></div>
+
+<div class="sec">Record <span style="font-weight:400;color:var(--ink2);font-size:13px">— every play this model has made, graded</span></div>
+<div class="measured" id="c-tnote"></div>
+<div class="reccards" id="c-trec"></div>
+<div class="edgegrid" style="margin-top:16px">
+<div class="card ecard"><h3>By size of edge</h3><div id="c-tbuckets"></div></div>
+<div class="card ecard"><h3>Graded plays</h3><div id="c-tplays"></div></div></div>
 
 <div class="sec">Matchup spread calculator <span style="font-weight:400;color:var(--ink2);font-size:13px">— venue-specific home field</span></div>
 <div class="card"><div class="calc">
@@ -154,6 +198,17 @@ losing at every margin tested, and break-even is 52.4%. Nothing here has been sh
 The headline number is <b>model vs. the win-total market</b> — where the softest NFL numbers live.</p>
 <span class="tag">Base: FPI (live)</span><span class="tag">Market: 2026 win totals</span>
 <span class="tag">Regression: 2025 luck</span><span class="tag">32 teams</span>
+
+<div class="sec">Big plays <span id="n-pwk" style="font-weight:400;color:var(--ink2);font-size:13px"></span></div>
+<div class="measured" id="n-pnote"></div>
+<div class="card"><div class="plays" id="n-plays"></div></div>
+
+<div class="sec">Record <span style="font-weight:400;color:var(--ink2);font-size:13px">— every play this model has made, graded</span></div>
+<div class="measured" id="n-tnote"></div>
+<div class="reccards" id="n-trec"></div>
+<div class="edgegrid" style="margin-top:16px">
+<div class="card ecard"><h3>By size of edge</h3><div id="n-tbuckets"></div></div>
+<div class="card ecard"><h3>Graded plays</h3><div id="n-tplays"></div></div></div>
 
 <div class="sec">Matchup spread calculator</div>
 <div class="card"><div class="calc">
@@ -220,6 +275,10 @@ const NFL_DATA=__NFL_DATA__;
 const NFL_GAMES=__NFL_GAMES__;
 const SOURCES=__SOURCES__;
 const KEY_NUMBERS=__KEY_NUMBERS__;
+/* Injected from playrules.py so the card on screen and the record kept
+   against it can never be scored by two drifting copies of the rules. */
+const RULES=__PLAY_RULES__;
+const TRACKER=__TRACKER__;
 /* [[week, last kickoff]] per league. The current week is resolved here rather
    than baked in at build time: a week is not over until its last game starts,
    so a constant stamped on Monday morning would still name the outgoing week
@@ -230,7 +289,7 @@ function currentWeek(lg){
  for(const [w,iso] of ws) if(new Date(iso).getTime()>=now) return w;
  return ws.length?ws[ws.length-1][0]+1:null;}
 const BUILT_ISO="__BUILT_ISO__";
-const REGW={C:0.7,B:1.0,A:1.4};
+const REGW=RULES.REGW;
 /* Preseason tilts (talent, portal, returning production, prior-year regression)
    hold their value for a while, then go stale. How long differs sharply by
    league — measured in backtest.py by replaying point-in-time FPI against a
@@ -243,9 +302,114 @@ const REGW={C:0.7,B:1.0,A:1.4};
    three times faster and six weeks earlier. Each league holds flat for its own
    measured window, then fades to a floor — preseason signal decays, but it
    never becomes worthless. */
-const DECAY={cfb:{hold:2,fade:8},nfl:{hold:9,fade:9}};
+const DECAY=RULES.DECAY;
 const decay=(lg,wk)=>{const d=DECAY[lg];
  return (wk==null||wk<=d.hold)?1:Math.max(0.25,1-(wk-d.hold)/d.fade*0.75);};
+
+/* ==================== Play strength ====================
+   The desk's rules, applied to numbers already on this page:
+
+     bettable   the book's number is inside 17. Lines past that are priced off
+                a different distribution and the model has no business there.
+     play       at least 1 point off the number.
+     tier       either side G5 makes the game a no-bet. It is still shown and
+                still scored, so a declined game stays visible.
+
+   The edge curve peaks at 3-5 points and is discounted past 7 deliberately.
+   That shape is measured, not folklore: replaying 816 NFL games against
+   closing lines (backtest.py), disagreements of 4+ points went 42.9% while
+   the whole set went 48.1%. Past a touchdown, a disagreement is more often a
+   stale injury than a soft number, so size alone is treated as a warning.
+   Break-even at -110 is 52.4%; nothing here has cleared it yet. */
+const BETTABLE_MAX=RULES.BETTABLE_MAX, PLAY_MIN=RULES.PLAY_MIN, KEY_NUMS=RULES.KEY_NUMS;
+
+/* Key numbers are crossed in signed home-margin space, so a line that moves
+   through a number — or across zero and into one on the other side — counts. */
+function keysCrossed(a,b){
+ const lo=Math.min(a,b),hi=Math.max(a,b);
+ if(lo===hi) return [];
+ return KEY_NUMS.filter(k=>(lo<=k&&k<=hi)||(lo<=-k&&-k<=hi));}
+
+function playRank(edge,unc,o){
+ let s;
+ if(edge<PLAY_MIN)   s=0;
+ else if(edge<1.5)   s=0.75;
+ else if(edge<3)     s=1+(edge-1.5)/1.5;        // lean
+ else if(edge<=5)    s=3+(edge-3)/2;            // the sweet spot
+ else if(edge<=7)    s=3.5-(edge-5)*0.25;       // strong, but verify the news
+ else                s=Math.max(0.5,3-(edge-7)/2);
+ if(s>0){
+  const r=unc>0?edge/unc:2;        // the edge measured against this game's own band
+  if(r>=1) s+=0.5; else if(r<0.5) s-=1;
+  if(o.keys&&o.keys.length) s+=0.5;
+  if(o.conf==='High') s+=0.25;
+  else if(o.conf==='Low'||o.conf==='Low+') s-=0.5;}
+ return Math.max(0,Math.min(5,s));}
+
+function playTag(edge,tier){
+ if(tier==='G5')   return {k:'nobet', t:'No bet · G5'};
+ if(edge<1.5)      return {k:'lean',  t:'Thin'};
+ if(edge<3)        return {k:'lean',  t:'Lean'};
+ if(edge<=5)       return {k:'play',  t:'Play'};
+ if(edge<=7)       return {k:'strong',t:'Strong · check news'};
+ return {k:'trap', t:'Trap risk · check injuries'};}
+
+function starHTML(s){
+ const full=Math.floor(s+0.25), half=(s-full)>=0.25;
+ let out='';
+ for(let i=0;i<5;i++)
+  out += i<full ? '\u2605'
+       : (i===full&&half) ? '<span style="opacity:.5">\u2605</span>'
+       : '<span class="off">\u2605</span>';
+ return `<span class="stars">${out}</span>`;}
+
+/* Shared row builder. `tierOf` returns 'P4'/'G5' for college and null for the
+   NFL, where there is no tier rule to apply. */
+function buildPlays(GAMES,rec,schedLine,mktInfo,tierOf,confOf){
+ const out=[], now=Date.now();
+ for(const g of GAMES){
+  if(g.mkt==null) continue;
+  /* Filter on kickoff, not week number. The rebuild runs Monday morning, when
+     the week has not turned over but its Sunday games are already played and
+     the market feed still carries their closing lines — a week-based filter
+     would rank a finished game as if it were on the board. */
+  const ko=g.iso?new Date(g.iso).getTime():null;
+  if(ko==null||ko<=now) continue;
+  if(g.fbs===false) continue;
+  if(Math.abs(g.mkt)>BETTABLE_MAX) continue;
+  const s=schedLine(g); if(!s) continue;
+  const m=mktInfo(g,s); if(!m||m.pts<PLAY_MIN) continue;
+  const h=rec(g.home),a=rec(g.away); if(!h||!a) continue;
+  const tier=tierOf?tierOf(h,a):null;
+  const conf=confOf?confOf(h,a,m,g):null;
+  const keys=keysCrossed(g.mkt,s.margin);
+  const score=tier==='G5'?0:playRank(m.pts,s.unc,{keys,conf});
+  out.push({g,s,m,tier,conf,keys,score,
+   getting:(m.side===m.fav?-m.line:m.line)});}
+ return out.sort((x,y)=>y.score-x.score||y.m.pts-x.m.pts);}
+
+function playRowHTML(r){
+ const t=playTag(r.m.pts,r.tier);
+ const num=r.getting>=0?`+${r.getting.toFixed(1)}`:r.getting.toFixed(1);
+ const opp=r.m.side===r.g.home?r.g.away:r.g.home;
+ /* A model that makes the game even reads as pick'em, not as "-0.0". */
+ const ml=r.s.line<0.05?`model pick'em`:`model ${r.s.fav} \u2212${r.s.line.toFixed(1)}`;
+ const bits=[`vs ${opp}`,`wk ${r.g.week}`,r.g.date];
+ if(r.tier) bits.push(`<b>${r.tier}</b>`);
+ if(r.conf) bits.push(`${r.conf} confidence`);
+ return `<div class="play${r.tier==='G5'?' nobet':''}">
+  <div>${starHTML(r.score)}</div>
+  <div><div class="pside">${r.m.side} ${num}</div>
+   <div class="pmeta">${bits.join(' \u00b7 ')}${r.keys.length?`<span class="keyx">crosses ${r.keys.join(' & ')}</span>`:''}</div></div>
+  <div class="pnum"><div class="num${r.tier==='G5'?'':' pos'}">${r.m.pts.toFixed(1)} pts</div>
+   <div class="pmeta">${ml} <span class="band">\u00b1${r.s.unc}</span></div>
+   <div style="margin-top:4px"><span class="ptag t-${t.k}">${t.t}</span></div></div></div>`;}
+
+const PLAY_NOTE=`<b>Ranked by strength, not by size.</b> Edge is the model's number minus the book's, on the side it likes. `
+ +`The scale peaks at 3\u20135 points and is discounted past 7 on purpose \u2014 replaying 816 NFL games against closing lines `
+ +`(<code>backtest.py</code>), disagreements of 4+ points went <b>42.9%</b> while the whole set went <b>48.1%</b>, so past a touchdown a `
+ +`disagreement is more often a stale injury than a soft number. Break-even at -110 is <b>52.4%</b>, and nothing here has cleared it yet \u2014 `
+ +`these are the strongest disagreements, not proven winners.`;
 
 const $=s=>document.querySelector(s);
 function buildWeekFilter(sel,games,onPick){
@@ -314,6 +478,76 @@ freshness('cfb');
    return `<span style="font-size:12px;padding:2px 8px;border-radius:6px;${push?'border:1.5px solid var(--series1);font-weight:700;':'background:var(--chip);'}">${s.margin>0?'+':''}${s.margin} <span style="color:var(--ink2)">${s.pct}%</span></span>`;}).join('')
   +`</div>`).join('');
 })();
+
+/* ==================== Record ====================
+   Graded from ledger.json, which is written once per play at first sighting and
+   never recomputed. That is the whole point: FPI refreshes weekly, so a record
+   rebuilt from today's ratings would quietly improve its own past. Only results
+   are ever filled in after the fact. */
+const BE=TRACKER.break_even;
+const pctCls=p=>p==null?'':(p>=BE?'pos':'neg');
+
+/* A 95% Wilson interval, shown next to every percentage because at these sample
+   sizes it is wider than the gap to break-even — which is the single most
+   important thing to know about an early record. Wilson rather than the
+   textbook normal interval because the latter collapses to +/-0 on a 2-0 start
+   and would read as certainty at exactly the moment there is none. */
+function wilson(r){
+ if(!r||!r.n) return null;
+ const z=1.96,n=r.n,p=r.w/n,z2=z*z,d=1+z2/n;
+ const c=(p+z2/(2*n))/d, hw=z/d*Math.sqrt(p*(1-p)/n+z2/(4*n*n));
+ return [Math.max(0,Math.round((c-hw)*1000)/10),
+         Math.min(100,Math.round((c+hw)*1000)/10)];}
+const ciTxt=r=>{const w=wilson(r);return w?`${w[0]}\u2013${w[1]}%`:'';};
+
+function recCard(lab,r){
+ if(!r||!r.n) return `<div class="reccard"><div class="lab">${lab}</div>
+  <div class="val" style="color:var(--muted)">—</div>
+  <div class="pct" style="color:var(--muted);font-weight:400">nothing graded yet</div></div>`;
+ return `<div class="reccard"><div class="lab">${lab}</div>
+  <div class="val">${r.w}\u2013${r.l}${r.push?`<span style="font-size:12px;color:var(--muted);font-weight:400"> +${r.push}P</span>`:''}</div>
+  <div class="pct ${pctCls(r.pct)}">${r.pct}%<span style="color:var(--ink2);font-weight:400"> \u00b7 95% ${ciTxt(r)} \u00b7 n=${r.n}</span></div></div>`;}
+
+function bucketRows(list){
+ const rows=(list||[]).filter(b=>b.n);
+ if(!rows.length) return '<div class="pempty">Nothing graded yet.</div>';
+ return rows.map(b=>`<div class="eitem"><div><div class="team">${b.bucket} pts</div>
+  <div class="why">${b.w}\u2013${b.l}${b.push?` \u00b7 ${b.push} push`:''} \u00b7 95% ${ciTxt(b)}</div></div>
+  <div style="text-align:right"><div class="num ${pctCls(b.pct)}">${b.pct}%</div>
+  <div style="font-size:11px;color:var(--ink2)">n=${b.n}</div></div></div>`).join('');}
+
+function gradedRows(list){
+ if(!list.length) return '<div class="pempty">No graded plays yet \u2014 this fills in as each week finishes.</div>';
+ return list.map(p=>`<div class="eitem"><div><div class="team">${p.side} ${p.getting>=0?'+':''}${p.getting}<span class="res res-${p.ats}">${p.ats}</span></div>
+  <div class="why">${p.away} @ ${p.home} \u00b7 wk ${p.week} \u00b7 ${p.away_pts}\u2013${p.home_pts}${p.tier?` \u00b7 ${p.tier}`:''}</div></div>
+  <div style="text-align:right"><div class="num">${p.abs_edge}</div>
+  <div style="font-size:11px;color:var(--ink2)">pts edge</div></div></div>`).join('');}
+
+function renderTracker(lg,px){
+ const T=TRACKER, S=T[lg]||{}, cards=[];
+ if(lg==='cfb'){
+  cards.push(recCard('CFB recommended (P4)',T.p4));
+  cards.push(recCard('CFB G5 (no-bet)',T.g5));
+  cards.push(recCard('All CFB plays',S.all));
+ }else{
+  cards.push(recCard('NFL plays',S.all));
+  cards.push(recCard('Recommended (P4 + NFL)',T.recommended));
+ }
+ cards.push(recCard('Every play, both sports',T.overall));
+ $('#'+px+'-trec').innerHTML=cards.join('');
+ $('#'+px+'-tbuckets').innerHTML=bucketRows(S.by_bucket);
+ $('#'+px+'-tplays').innerHTML=gradedRows((T.recent||[]).filter(p=>p.lg===lg));
+ const n=(S.all&&S.all.n)||0, pend=T.pending||0;
+ const need=Math.round(Math.pow(1.96/0.0215,2)*0.25);
+ $('#'+px+'-tnote').innerHTML=`<b>Recorded before kickoff, graded after.</b> Each play is written to the ledger the first `
+  +`build that sees it and is never recomputed, so a weekly FPI refresh cannot improve the model's own past. `
+  +`<b>${n}</b> ${lg.toUpperCase()} play${n===1?'':'s'} graded so far, ${pend} pending. `
+  +`Break-even at -110 is <b>${BE}%</b>, and the range next to each figure is the 95% interval \u2014 `
+  +`separating a real ${BE}% edge from a losing 48% takes on the order of <b>${need.toLocaleString()}</b> graded plays, `
+  +`so treat everything here as early.`;}
+
+/* Both cards read the same ledger; the elements are static, so this runs now. */
+renderTracker('cfb','c');renderTracker('nfl','n');
 
 /* ==================== CFB ==================== */
 (function(){
@@ -447,10 +681,34 @@ document.querySelectorAll('#c-gtype button').forEach(b=>b.addEventListener('clic
 document.querySelectorAll('#c-sched th').forEach(th=>th.addEventListener('click',()=>{const k=th.dataset.sk;
  if(k===skK)skAsc=!skAsc;else{skK=k;skAsc=(k==='week'||k==='date'||k==='match'||k==='fav');}renderSched();}));
 
+/* Big plays. Same numbers as the slate above, with the desk's rules applied
+   and the list sorted by strength. Either side G5 makes it a no-bet, but the
+   row still renders (dimmed) so a declined game is visible rather than absent. */
+let PF='rec';
+const CONF_ORDER=RULES.CONF_ORDER;
+const cfbTier=(h,a)=>(h.tier==='G5'||a.tier==='G5')?'G5':'P4';
+/* The weaker of the two teams sets the game's confidence — a firm rating on
+   one side is worth little opposite a team the model barely understands. */
+const cfbConf=(h,a)=>{
+ const i=x=>{const k=CONF_ORDER.indexOf(x);return k<0?1:k;};
+ return CONF_ORDER[Math.min(i(h.conf_lvl),i(a.conf_lvl))];};
+function renderPlays(){
+ const all=buildPlays(GAMES,rec,schedLine,mktInfo,cfbTier,cfbConf);
+ const p4=all.filter(r=>r.tier==='P4');
+ const rows=PF==='rec'?p4:all;
+ const box=$('#c-plays');
+ $('#c-pwk').textContent=all.length?`— ${all.length} qualify, ${p4.length} recommended`:'';
+ $('#c-pnote').innerHTML=PLAY_NOTE+` A game with a G5 team on either side is graded but never advised.`;
+ if(!all.length){box.innerHTML='<div class="pempty">No priced game clears the bar this build. Books post the slate a few days out, so this fills in as the week approaches.</div>';return;}
+ if(!rows.length){box.innerHTML='<div class="pempty">Nothing recommended — every qualifying game this week has a G5 team in it.</div>';return;}
+ box.innerHTML=rows.slice(0,30).map(playRowHTML).join('');}
+document.querySelectorAll('#c-pfilter button').forEach(b=>b.addEventListener('click',()=>{
+ document.querySelectorAll('#c-pfilter button').forEach(x=>x.classList.remove('on'));
+ b.classList.add('on');PF=b.dataset.p;renderPlays();}));
 document.querySelectorAll('#c-regime button').forEach(b=>b.addEventListener('click',()=>{
  document.querySelectorAll('#c-regime button').forEach(x=>x.classList.remove('on'));
- b.classList.add('on');REG=b.dataset.r;panels();render();calc();renderSched();}));
-autoHFA();calc();panels();render();renderSched();
+ b.classList.add('on');REG=b.dataset.r;panels();render();calc();renderSched();renderPlays();}));
+autoHFA();calc();panels();render();renderSched();renderPlays();
 })();
 
 /* ==================== NFL ==================== */
@@ -548,9 +806,18 @@ if(!GAMES.some(g=>g.mkt!=null)) $('#n-sched').classList.add('nomkt');
 buildWeekFilter('#n-wkfilter',GAMES,w=>{WK=w;renderSched();});
 document.querySelectorAll('#n-sched th').forEach(th=>th.addEventListener('click',()=>{const k=th.dataset.sk;
  if(k===skK)skAsc=!skAsc;else{skK=k;skAsc=(k==='week'||k==='date'||k==='match'||k==='fav');}renderSched();}));
+/* Big plays. No tier rule here — the NFL has one tier, and its market is the
+   sharpest in the sport, so the bar is the same 1 point but the honest
+   expectation is lower. */
+function renderPlays(){
+ const all=buildPlays(GAMES,rec,schedLine,mktInfo,null,null);
+ $('#n-pwk').textContent=all.length?`— ${all.length} qualify`:'';
+ $('#n-pnote').innerHTML=PLAY_NOTE;
+ $('#n-plays').innerHTML=all.length?all.slice(0,20).map(playRowHTML).join('')
+  :'<div class="pempty">No priced game clears the bar this build — closing lines arrive week by week, so this fills in as the season runs.</div>';}
 document.querySelectorAll('#n-regime button').forEach(b=>b.addEventListener('click',()=>{
  document.querySelectorAll('#n-regime button').forEach(x=>x.classList.remove('on'));b.classList.add('on');REG=b.dataset.r;
- panels();render();calc();renderSched();}));
-autoHFA();calc();panels();render();renderSched();
+ panels();render();calc();renderSched();renderPlays();}));
+autoHFA();calc();panels();render();renderSched();renderPlays();
 })();
 </script></body></html>

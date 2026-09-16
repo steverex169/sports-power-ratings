@@ -355,6 +355,7 @@ def get_cfb_schedule(year, fbs_teams, weeks=None):
             fbs = home in fbs_teams and away in fbs_teams
             games.append({"week": week_label, "date": date_str, "away": away,
                           "home": home, "site": site, "note": "",
+                          "iso": ev["date"],
                           "mkt": market.get((home, away)),
                           "fbs": fbs, "fcs": (None if fbs else (away if home in fbs_teams else home))})
 
@@ -421,7 +422,7 @@ def get_nfl_schedule(year, weeks=None):
             spread = market.get((wk, NV_ABBR.get(home_ab, home_ab),
                                  NV_ABBR.get(away_ab, away_ab)))
             games.append({"week": wk, "date": date_str, "away": away, "home": home,
-                          "site": site, "mkt": spread})
+                          "site": site, "iso": ev["date"], "mkt": spread})
 
     WEEK_ENDS["nfl"] = _week_ends(kickoffs)
     CURRENT_WEEK["nfl"] = _current_week(WEEK_ENDS["nfl"])
@@ -432,6 +433,56 @@ def get_nfl_schedule(year, weeks=None):
             "live" if all(m == "live" for m in modes) else "cache",
             _sched_detail(games, failed, malformed=malformed))
     return games
+
+
+def get_results(league, year, weeks):
+    """{(week, away, home): (away_pts, home_pts)} for games that have finished.
+
+    Team names are derived exactly as get_cfb_schedule/get_nfl_schedule derive
+    them, so a result lines up with the play recorded against it without a
+    second, lossy name-matching layer in between. Unfinished games are simply
+    absent, which is what lets the ledger grade a week as it completes.
+    """
+    espn = "college-football" if league == "cfb" else "nfl"
+    extra = "&groups=80" if league == "cfb" else ""
+    out = {}
+    for wk in weeks:
+        try:
+            events, _ = _week_events(espn, year, wk, extra,
+                                     f"res_{league}_{year}_w{wk}")
+        except Exception:  # noqa: BLE001 — one bad week shouldn't sink grading
+            continue
+        for ev in events:
+            comp = next(iter(ev.get("competitions") or []), None)
+            if not comp or not comp.get("competitors"):
+                continue
+            if comp.get("status", {}).get("type", {}).get("name") != "STATUS_FINAL":
+                continue
+            home = away = h_pts = a_pts = None
+            for c in comp["competitors"]:
+                t = c.get("team", {})
+                nm = canon(t.get("shortDisplayName")) if league == "cfb" \
+                    else t.get("displayName")
+                try:
+                    sc = int(c.get("score"))
+                except (TypeError, ValueError):
+                    continue
+                if c.get("homeAway") == "home":
+                    home, h_pts = nm, sc
+                else:
+                    away, a_pts = nm, sc
+            if not home or not away or h_pts is None or a_pts is None:
+                continue
+            # the same week-0 relabel the CFB schedule applies
+            wk_label = wk
+            if league == "cfb" and wk == 1 and ev.get("date"):
+                try:
+                    if int(ev["date"][5:7]) == 8:
+                        wk_label = 0
+                except ValueError:
+                    pass
+            out[(wk_label, away, home)] = (a_pts, h_pts)
+    return out
 
 
 def _span(weeks):
@@ -469,16 +520,28 @@ _PIN_SPORT_FOOTBALL = 15
 PIN_LEAGUES = {"cfb": 880, "nfl": 889}
 
 
-def _pin_env():
-    env = {k: os.environ.get(k) for k in
-           ("PS3838_BASE_URL", "PS3838_USERNAME", "PS3838_PASSWORD", "PS3838_PROXY")}
+def _env_file():
+    """key=value pairs from the gitignored secrets file, if there is one.
+
+    One file holds every server-side secret. deploy.sh excludes it from the
+    rsync, so a redeploy cannot delete what is only on the server.
+    """
+    out = {}
     path = os.path.join(BASE, "pinnacle_env.txt")
     if os.path.exists(path):
         for line in open(path):
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 k, v = line.split("=", 1)
-                env[k.strip()] = env.get(k.strip()) or v.strip()
+                out[k.strip()] = v.strip()
+    return out
+
+
+def _pin_env():
+    env = {k: os.environ.get(k) for k in
+           ("PS3838_BASE_URL", "PS3838_USERNAME", "PS3838_PASSWORD", "PS3838_PROXY")}
+    for k, v in _env_file().items():
+        env[k] = env.get(k) or v
     if not (env.get("PS3838_USERNAME") and env.get("PS3838_PASSWORD")):
         return None
     env["PS3838_BASE_URL"] = env.get("PS3838_BASE_URL") or "https://api.probet42.com"
@@ -608,7 +671,7 @@ def _cfbd_key():
     kf = os.path.join(BASE, "cfbd_key.txt")
     if os.path.exists(kf):
         return open(kf).read().strip()
-    return None
+    return _env_file().get("CFBD_API_KEY")
 
 
 def get_cfb_talent(year):

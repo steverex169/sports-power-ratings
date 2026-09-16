@@ -38,9 +38,14 @@ SITE_PW="$(cat "$PWFILE")"
 echo "==> syncing project"
 rsync -az --delete -e "$SSH" \
   --exclude '.git' --exclude '.venv' --exclude 'data/cache' --exclude 'deploy/.site-password' \
+  --exclude 'data/ledger.json' --exclude 'cfbd_key.txt' \
   --exclude '__pycache__' --exclude '*.pyc' --exclude '.env' --exclude 'pinnacle_env.txt' \
   --rsync-path="sudo mkdir -p $APP_DIR && sudo chown -R $USER_NAME $APP_DIR && rsync" \
   "$HERE/" "$USER_NAME@$HOST:$APP_DIR/"
+
+# data/ledger.json is excluded, so --delete cannot wipe the record of what the
+# model said before games it has already been graded on. The server's copy is
+# the authoritative one — it is what the weekly timer appends to.
 
 # Odds credentials: read from this shell's env, written server-side with 600.
 if [ -n "${PS3838_USERNAME:-}" ] && [ -n "${PS3838_PASSWORD:-}" ]; then

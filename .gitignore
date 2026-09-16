@@ -11,3 +11,6 @@ index.html
 cfb_ratings_v2.csv
 nfl_ratings.csv
 deploy/.site-password
+
+# the record — the server owns it; refresh.sh syncs it both ways
+data/ledger.json
