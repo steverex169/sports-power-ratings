@@ -279,6 +279,8 @@ const KEY_NUMBERS=__KEY_NUMBERS__;
    against it can never be scored by two drifting copies of the rules. */
 const RULES=__PLAY_RULES__;
 const TRACKER=__TRACKER__;
+/* {final margin: share of games finishing there}, measured in keynumbers.py. */
+const KEY_MASS=__KEY_MASS__;
 /* [[week, last kickoff]] per league. The current week is resolved here rather
    than baked in at build time: a week is not over until its last game starts,
    so a constant stamped on Monday morning would still name the outgoing week
@@ -330,6 +332,28 @@ function keysCrossed(a,b){
  if(lo===hi) return [];
  return KEY_NUMS.filter(k=>(lo<=k&&k<=hi)||(lo<=-k&&-k<=hi));}
 
+/* The share of games whose final margin falls between the book's number and the
+   model's — the outcomes the edge actually moves through, and the honest measure
+   of what a disagreement is worth. Two points from 2.5 to 4.5 crosses 3 and
+   picks up 19.5% of all outcomes; the same two points from 4.5 to 6.5 picks up
+   10.5%. Equal on the spread, worth very different things. */
+function massBetween(a,b){
+ if(!KEY_MASS) return null;
+ const lo=Math.min(a,b),hi=Math.max(a,b);
+ let t=0;
+ for(const m in KEY_MASS){const v=+m;
+  if((lo<=v&&v<=hi)||(lo<=-v&&-v<=hi)) t+=KEY_MASS[m];}
+ return Math.round(t*10)/10;}
+
+/* Crossing 3 is not crossing 10: 14.5% of games finish on 3 against 5.2% on 10,
+   so the move through 3 buys nearly three times the outcomes. */
+function keyBonus(keys){
+ if(!keys||!keys.length) return 0;
+ if(!KEY_MASS) return RULES.KEY_BONUS;
+ const ref=KEY_MASS[RULES.KEY_REF]||14.5;
+ let got=0; for(const k of keys) got+=(KEY_MASS[k]||0);
+ return RULES.KEY_BONUS*Math.min(1.5,got/ref);}
+
 function playRank(edge,unc,o){
  let s;
  if(edge<PLAY_MIN)   s=0;
@@ -341,7 +365,7 @@ function playRank(edge,unc,o){
  if(s>0){
   const r=unc>0?edge/unc:2;        // the edge measured against this game's own band
   if(r>=1) s+=0.5; else if(r<0.5) s-=1;
-  if(o.keys&&o.keys.length) s+=0.5;
+  s+=keyBonus(o.keys);
   if(o.conf==='High') s+=0.25;
   else if(o.conf==='Low'||o.conf==='Low+') s-=0.5;}
  return Math.max(0,Math.min(5,s));}
@@ -383,8 +407,9 @@ function buildPlays(GAMES,rec,schedLine,mktInfo,tierOf,confOf){
   const tier=tierOf?tierOf(h,a):null;
   const conf=confOf?confOf(h,a,m,g):null;
   const keys=keysCrossed(g.mkt,s.margin);
+  const span=massBetween(g.mkt,s.margin);
   const score=tier==='G5'?0:playRank(m.pts,s.unc,{keys,conf});
-  out.push({g,s,m,tier,conf,keys,score,
+  out.push({g,s,m,tier,conf,keys,span,score,
    getting:(m.side===m.fav?-m.line:m.line)});}
  return out.sort((x,y)=>y.score-x.score||y.m.pts-x.m.pts);}
 
@@ -400,7 +425,7 @@ function playRowHTML(r){
  return `<div class="play${r.tier==='G5'?' nobet':''}">
   <div>${starHTML(r.score)}</div>
   <div><div class="pside">${r.m.side} ${num}</div>
-   <div class="pmeta">${bits.join(' \u00b7 ')}${r.keys.length?`<span class="keyx">crosses ${r.keys.join(' & ')}</span>`:''}</div></div>
+   <div class="pmeta">${bits.join(' \u00b7 ')}${r.keys.length?`<span class="keyx">crosses ${r.keys.join(' & ')}</span>`:''}${r.span!=null?`<span class="keyx" style="background:var(--chip);color:var(--ink2)" title="Share of games whose final margin lands between the book's number and the model's">spans ${r.span}% of outcomes</span>`:''}</div></div>
   <div class="pnum"><div class="num${r.tier==='G5'?'':' pos'}">${r.m.pts.toFixed(1)} pts</div>
    <div class="pmeta">${ml} <span class="band">\u00b1${r.s.unc}</span></div>
    <div style="margin-top:4px"><span class="ptag t-${t.k}">${t.t}</span></div></div></div>`;}

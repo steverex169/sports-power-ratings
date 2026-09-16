@@ -102,13 +102,17 @@ def main():
 
     # The record. Plays are written down at first sighting and never recomputed,
     # so a later build can grade them but cannot quietly improve them.
+    # How often games actually finish on each number, so a line moving through
+    # 3 is scored above one moving through dead space.
+    mass = playrules.key_mass((key_numbers or {}).get("margins"))
+
     print("Updating ledger…")
     led = ledger.load()
     added = 0
     for lg, games, rows in (("cfb", cfb_games, cfb_rows), ("nfl", nfl_games, nfl_rows)):
         # Only games kicking off within the week: a line seen eleven days out
         # is not a number anyone could have taken.
-        plays = playrules.build_plays(lg, games, rows, horizon_days=7)
+        plays = playrules.build_plays(lg, games, rows, horizon_days=7, mass=mass)
         added += ledger.record(led, lg, plays, built_iso)
     graded = ledger.grade(led, year, ds.get_results)
     ledger.save(led)
@@ -135,6 +139,7 @@ def main():
             .replace("__WEEK_ENDS_NFL__", j(ds.WEEK_ENDS.get("nfl", [])))
             .replace("__KEY_NUMBERS__", j(key_numbers))
             .replace("__PLAY_RULES__", j(playrules.rules_for_page()))
+            .replace("__KEY_MASS__", j(mass))
             .replace("__TRACKER__", j(tracker))
             .replace("__UPDATED__", updated)
             .replace("__BUILT_ISO__", built_iso))

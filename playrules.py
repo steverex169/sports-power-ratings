@@ -31,6 +31,8 @@ DECAY = {"cfb": {"hold": 2, "fade": 8}, "nfl": {"hold": 9, "fade": 9}}
 BETTABLE_MAX = 17.0
 PLAY_MIN = 1.0
 KEY_NUMS = [3, 7, 10, 14]
+KEY_BONUS = 0.75        # what crossing the most valuable number is worth
+KEY_REF = 3             # ...which is 3. Everything else scales off its mass.
 CONF_ORDER = ["Low", "Low+", "Med", "High"]
 
 # Edge buckets the ledger reports against. Break-even at -110 is 52.4%.
@@ -42,7 +44,8 @@ BREAK_EVEN = 52.4
 def rules_for_page():
     """The subset the dashboard needs, injected as JSON at build time."""
     return {"REGW": REGW, "DECAY": DECAY, "BETTABLE_MAX": BETTABLE_MAX,
-            "PLAY_MIN": PLAY_MIN, "KEY_NUMS": KEY_NUMS, "CONF_ORDER": CONF_ORDER}
+            "PLAY_MIN": PLAY_MIN, "KEY_NUMS": KEY_NUMS, "CONF_ORDER": CONF_ORDER,
+            "KEY_BONUS": KEY_BONUS, "KEY_REF": KEY_REF}
 
 
 def decay(lg, wk):
@@ -71,7 +74,47 @@ def keys_crossed(a, b):
     return [k for k in KEY_NUMS if (lo <= k <= hi) or (lo <= -k <= hi)]
 
 
-def play_rank(edge, unc, keys, conf):
+def key_mass(margins):
+    """{final margin: share of games finishing there}, from keynumbers.compute().
+
+    Measured from 4,171 NFL games of closing lines and results. The CFB card
+    borrows the same table: no free source of historical college lines exists,
+    and the shape is close enough that 3 and 7 dominate there too, but it is a
+    borrowed distribution rather than a measured one.
+    """
+    return {int(r["margin"]): float(r["pct"]) for r in (margins or [])}
+
+
+def mass_between(a, b, mass):
+    """Share of games whose final margin lands between the book's number and
+    the model's — the outcomes the edge actually moves through.
+
+    This is the honest measure of what a disagreement is worth. Two points from
+    2.5 to 4.5 crosses 3 and picks up 19.5% of all outcomes; the same two points
+    from 4.5 to 6.5 picks up 10.5%. Equal on the spread, worth very different
+    things, which is why size alone was never the right ranking.
+    """
+    if not mass:
+        return None
+    lo, hi = min(a, b), max(a, b)
+    return round(sum(pct for m, pct in mass.items()
+                     if (lo <= m <= hi) or (lo <= -m <= hi)), 1)
+
+
+def key_bonus(keys, mass):
+    """Crossing 3 is not the same as crossing 10 — 14.5% of games finish on 3
+    against 5.2% on 10, so the move through 3 buys nearly three times the
+    outcomes. A flat bonus would price them the same."""
+    if not keys:
+        return 0.0
+    if not mass:
+        return KEY_BONUS
+    ref = mass.get(KEY_REF) or 14.5
+    got = sum(mass.get(k, 0.0) for k in keys)
+    return round(KEY_BONUS * min(1.5, got / ref), 3)
+
+
+def play_rank(edge, unc, keys, conf, mass=None):
     if edge < PLAY_MIN:
         return 0.0
     if edge < 1.5:
@@ -89,8 +132,7 @@ def play_rank(edge, unc, keys, conf):
         s += 0.5
     elif r < 0.5:
         s -= 1
-    if keys:
-        s += 0.5
+    s += key_bonus(keys, mass)
     if conf == "High":
         s += 0.25
     elif conf in ("Low", "Low+"):
@@ -114,7 +156,7 @@ def _kickoff(g):
         return None
 
 
-def build_plays(lg, games, rows, now=None, horizon_days=None):
+def build_plays(lg, games, rows, now=None, horizon_days=None, mass=None):
     """Every game that clears the bar and has not kicked off yet.
 
     Filtering on kickoff rather than on week number matters more than it looks:
@@ -156,13 +198,14 @@ def build_plays(lg, games, rows, now=None, horizon_days=None):
             if lg == "cfb" else None
         conf = _conf_of(h, a) if lg == "cfb" else None
         keys = keys_crossed(mkt, margin)
-        stars = 0.0 if tier == "G5" else play_rank(abs(edge), unc, keys, conf)
+        stars = 0.0 if tier == "G5" else play_rank(abs(edge), unc, keys, conf, mass)
         out.append({
             "week": wk, "date": g["date"], "away": g["away"], "home": g["home"],
             "neutral": bool(g.get("site")), "mkt": mkt, "model": margin,
             "edge": edge, "abs_edge": round(abs(edge), 1), "side": side,
             "getting": round(-abs(mkt) if side == mkt_fav else abs(mkt), 1),
             "tier": tier, "conf": conf, "band": unc, "keys": keys, "stars": stars,
+            "span": mass_between(mkt, margin, mass),
         })
     out.sort(key=lambda p: (-p["stars"], -p["abs_edge"]))
     return out
