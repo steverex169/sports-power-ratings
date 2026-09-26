@@ -27,12 +27,16 @@ can be checked the same way the tilts were rather than believed.
 """
 import csv
 import datetime
+import json
 import os
 
 import data_sources as ds
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 VALUES_PATH = os.path.join(BASE, "data", "injury_values.csv")
+# When each priced absence was first seen, so the page can flag what is new.
+# Server-side state like the ledger: deploy.sh must not sync over it.
+SEEN_PATH = os.environ.get("INJURY_SEEN_PATH") or os.path.join(BASE, "data", "injury_seen.json")
 
 # site.web.api, not site.api: the latter returns 403 to AWS ranges.
 FEED = "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/injuries"
@@ -74,7 +78,7 @@ def _qb1(team_id):
 
 
 def get_nfl_injuries():
-    """{team: [(player, points, why), ...]} for absences that move the line."""
+    """{team: [{player, pos, status, pts, why}, ...]} for absences that move the line."""
     try:
         feed, mode = ds.http_get_json(FEED, "nfl_injuries")
     except Exception as e:  # noqa: BLE001 — an injury outage should not stop a build
@@ -85,13 +89,13 @@ def get_nfl_injuries():
     for t in feed.get("injuries") or []:
         team = t.get("displayName")
         missing = [(i["athlete"].get("displayName"),
-                    (i["athlete"].get("position") or {}).get("abbreviation"))
+                    (i["athlete"].get("position") or {}).get("abbreviation"), i["status"])
                    for i in t.get("injuries") or []
                    if i.get("status") in MISSING and i.get("athlete")]
         if not missing:
             continue
-        qb1 = _qb1(t.get("id")) if any(p == "QB" for _, p in missing) else None
-        for name, pos in missing:
+        qb1 = _qb1(t.get("id")) if any(p == "QB" for _, p, _ in missing) else None
+        for name, pos, status in missing:
             v = vals.get(("NFL", team, name))
             if v:
                 pts, why = v[0], v[1] or "on the list"
@@ -99,7 +103,8 @@ def get_nfl_injuries():
                 pts, why = QB1_DEFAULT, "starting QB"
             else:
                 continue
-            lost.setdefault(team, []).append((name, pts, why))
+            lost.setdefault(team, []).append(
+                {"player": name, "pos": pos, "status": status, "pts": pts, "why": why})
     n = sum(len(v) for v in lost.values())
     ds._report("NFL injuries (ESPN)", "live" if mode == "live" else mode,
                f"{n} absence(s) priced across {len(lost)} team(s)"
@@ -122,7 +127,36 @@ def apply(games, lost, horizon_days=7, now=None):
             continue
         h = lost.get(g["home"], [])
         a = lost.get(g["away"], [])
-        g["inj"] = round(sum(p for _, p, _ in a) - sum(p for _, p, _ in h), 1)
-        g["inj_note"] = ", ".join(f"{n} out −{p:.1f}" for n, p, _ in h + a)
+        g["inj"] = round(sum(x["pts"] for x in a) - sum(x["pts"] for x in h), 1)
+        g["inj_note"] = ", ".join(f"{x['player']} {x['status'].lower()} −{x['pts']:.1f}"
+                                  for x in h + a)
         touched += 1
     return touched
+
+
+def track(lost, games, now=None, path=SEEN_PATH):
+    """The panel's rows: every priced absence, the game it moves and when it
+    was first seen. An absence that drops off the report is forgotten, so a
+    player hurt again later shows as new again."""
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    try:
+        with open(path, encoding="utf-8") as f:
+            seen = json.load(f)
+    except (OSError, ValueError):
+        seen = {}
+    rows, keep = [], {}
+    for team, xs in lost.items():
+        g = next((g for g in games if g.get("inj") is not None
+                  and team in (g["home"], g["away"])), None)
+        for x in xs:
+            k = f"{team}|{x['player']}"
+            keep[k] = seen.get(k) or now.isoformat(timespec="seconds")
+            rows.append(dict(x, team=team, first_seen=keep[k],
+                             game=(f"{g['away']} @ {g['home']}" if g else None),
+                             week=g["week"] if g else None,
+                             date=g["date"] if g else None))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(keep, f, indent=1, sort_keys=True)
+    rows.sort(key=lambda r: r["first_seen"], reverse=True)
+    return rows
