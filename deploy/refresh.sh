@@ -4,10 +4,11 @@
 #   HOST=1.2.3.4 ./deploy/refresh.sh
 #
 # Why this exists: the odds API answers this machine but returns 403 to the
-# EC2 box — books block datacenter ranges, and AWS most of all. Everything else
-# (ESPN, nflverse) works fine from the server, so the box still rebuilds weekly
-# on its own; that build simply has no CFB market lines. Running this from a
-# residential connection is what puts them on the site.
+# EC2 box — books block datacenter ranges, and AWS most of all. With
+# PS3838_PROXY installed on the server, the box rebuilds every 6 hours on its
+# own with CFB market lines, and this is only a manual out-of-cycle refresh.
+# Without the proxy, running this from a residential connection is what puts
+# those lines on the site.
 set -euo pipefail
 
 KEY="${KEY:-$HOME/Downloads/joesmodel.pem}"

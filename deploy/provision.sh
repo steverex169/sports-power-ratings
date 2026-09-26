@@ -78,7 +78,7 @@ CADDY
 sudo systemctl enable --now caddy >/dev/null 2>&1 || true
 sudo systemctl reload caddy 2>/dev/null || sudo systemctl restart caddy
 
-echo "==> weekly rebuild (Mondays 11:00 UTC, matching the old GitHub schedule)"
+echo "==> rebuild timer (every 6 hours, 00/06/12/18 UTC)"
 sudo tee /etc/systemd/system/powerratings.service >/dev/null <<UNIT
 [Unit]
 Description=Rebuild sports power ratings
@@ -93,10 +93,10 @@ ExecStartPost=/bin/cp $APP_DIR/index.html $SITE_DIR/index.html
 UNIT
 sudo tee /etc/systemd/system/powerratings.timer >/dev/null <<UNIT
 [Unit]
-Description=Weekly rebuild of sports power ratings
+Description=Rebuild of sports power ratings, every 6 hours
 
 [Timer]
-OnCalendar=Mon *-*-* 11:00:00 UTC
+OnCalendar=*-*-* 00/6:00:00 UTC
 Persistent=true
 
 [Install]
