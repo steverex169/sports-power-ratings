@@ -187,7 +187,8 @@ def build_plays(lg, games, rows, now=None, horizon_days=None, mass=None):
             continue
         wk = g["week"]
         hfa = 0.0 if g.get("site") else h["hfa"]
-        margin = round(rating(h, lg, wk) - rating(a, lg, wk) + hfa, 1)
+        # injuries.apply() prices this week's absences onto the game itself
+        margin = round(rating(h, lg, wk) - rating(a, lg, wk) + hfa + (g.get("inj") or 0), 1)
         edge = round(margin - mkt, 1)
         if abs(edge) < PLAY_MIN:
             continue
@@ -206,6 +207,7 @@ def build_plays(lg, games, rows, now=None, horizon_days=None, mass=None):
             "getting": round(-abs(mkt) if side == mkt_fav else abs(mkt), 1),
             "tier": tier, "conf": conf, "band": unc, "keys": keys, "stars": stars,
             "span": mass_between(mkt, margin, mass),
+            "inj": g.get("inj"), "inj_note": g.get("inj_note"),
         })
     out.sort(key=lambda p: (-p["stars"], -p["abs_edge"]))
     return out

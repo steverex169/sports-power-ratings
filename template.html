@@ -266,7 +266,7 @@ break-even. Method and numbers are in <code>backtest.py</code>.</div>
 <th class="l" data-k="edge">Edge vs Mkt</th><th data-k="win">Win Tot</th><th data-k="reg">Reg</th><th data-k="qb">QB</th><th data-k="ros">Roster</th>
 </tr></thead><tbody id="n-tb"></tbody></table></div>
 
-<div class="foot"><b>How the number is built.</b> MyRating = FPI + regime × (RegTilt + QBAdj + RosterAdj). RegTilt = −(0.06 × 2025 turnover margin + 0.40 × close-game luck), capped ±2.5 — fades teams whose record/margin was luck-inflated, buys the unlucky. QBAdj: star QB back from injury +0.6 to +1.3, clear new-QB downgrade −1.2 to −1.5, unsettled battle 0 (wider band). Roster: ±0.5–0.8. Market rating is implied from 2026 win totals; "Edge vs Mkt" is MyRating minus that. Tilts are deliberately small because NFL FPI and the market are both sharp. NFL HFA ~1.8 and noisy. Preseason tilts are held flat through wk 9 then faded — the NFL window measured over 816 games in backtest.py. FPI itself refreshes weekly.
+<div class="foot"><b>How the number is built.</b> MyRating = FPI + regime × (RegTilt + QBAdj + RosterAdj). RegTilt = −(0.06 × 2025 turnover margin + 0.40 × close-game luck), capped ±2.5 — fades teams whose record/margin was luck-inflated, buys the unlucky. QBAdj: star QB back from injury +0.6 to +1.3, clear new-QB downgrade −1.2 to −1.5, unsettled battle 0 (wider band). Roster: ±0.5–0.8. Market rating is implied from 2026 win totals; "Edge vs Mkt" is MyRating minus that. Tilts are deliberately small because NFL FPI and the market are both sharp. Injuries: a player ESPN lists Out or Doubtful moves that week's margin only — by his value on the hand-kept list, or 3.0 for a starting QB not on it. Injured Reserve is left to FPI, which has already rated the games without him. NFL HFA ~1.8 and noisy. Preseason tilts are held flat through wk 9 then faded — the NFL window measured over 816 games in backtest.py. FPI itself refreshes weekly.
 <div class="srcs" id="n-srcs"></div>
 <div class="disc"><b>For research and entertainment only — not betting or financial advice.</b> NFL markets are highly efficient; no model beats them reliably.</div></div>
 </div>
@@ -428,7 +428,7 @@ function playRowHTML(r){
  return `<div class="play${r.tier==='G5'?' nobet':''}">
   <div>${starHTML(r.score)}</div>
   <div><div class="pside">${r.m.side} ${num}</div>
-   <div class="pmeta">${bits.join(' \u00b7 ')}${r.keys.length?`<span class="keyx">crosses ${r.keys.join(' & ')}</span>`:''}${r.span!=null?`<span class="keyx" style="background:var(--chip);color:var(--ink2)" title="Share of games whose final margin lands between the book's number and the model's">spans ${r.span}% of outcomes</span>`:''}</div></div>
+   <div class="pmeta">${bits.join(' \u00b7 ')}${r.keys.length?`<span class="keyx">crosses ${r.keys.join(' & ')}</span>`:''}${r.span!=null?`<span class="keyx" style="background:var(--chip);color:var(--ink2)" title="Share of games whose final margin lands between the book's number and the model's">spans ${r.span}% of outcomes</span>`:''}${r.g.inj_note?`<span class="keyx" style="background:color-mix(in srgb,var(--crit) 14%,transparent);color:var(--crit)" title="This week's absences, already in the model's number">${r.g.inj_note}</span>`:''}</div></div>
   <div class="pnum"><div class="num${r.tier==='G5'?'':' pos'}">${r.m.pts.toFixed(1)} pts</div>
    <div class="pmeta">${ml} <span class="band">\u00b1${r.s.unc}</span></div>
    <div style="margin-top:4px"><span class="ptag t-${t.k}">${t.t}</span></div></div></div>`;}
@@ -795,7 +795,7 @@ document.querySelectorAll('#n-tbl th').forEach(th=>th.addEventListener('click',(
 $('#n-q').addEventListener('input',render);
 let skK='date',skAsc=true,WK='all';
 function schedLine(g){const a=rec(g.away),h=rec(g.home);if(!a||!h)return null;const hfa=g.site?0:h.hfa;
- const margin=myOf(h,g.week)-myOf(a,g.week)+hfa;const fav=margin>=0?g.home:g.away;
+ const margin=myOf(h,g.week)-myOf(a,g.week)+hfa+(g.inj||0);const fav=margin>=0?g.home:g.away;
  return {fav,margin:+margin.toFixed(1),line:+Math.abs(margin).toFixed(1),
   unc:Math.round(Math.sqrt(a.band*a.band+h.band*h.band)*10)/10};}
 /* g.mkt is the book's spread, positive when the home team is favoured. The

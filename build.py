@@ -18,6 +18,7 @@ sys.path.insert(0, BASE)
 
 import data_sources as ds
 import fallback_data as fb
+import injuries
 import keynumbers
 import ledger
 import models
@@ -72,6 +73,8 @@ def main():
     portal = ds.get_cfb_portal()
     cfb_games = ds.get_cfb_schedule(year, set(cfb_fpi), cfb_weeks)
     nfl_games = ds.get_nfl_schedule(year, nfl_weeks)
+    # Absences move this week's margins only, never the season ratings.
+    injuries.apply(nfl_games, injuries.get_nfl_injuries())
 
     # Flag any FPI teams with no conference mapping (e.g. realignment/new FBS teams)
     unknown = sorted(t for t in cfb_fpi if t not in fb.CFB_CONF)
