@@ -14,3 +14,6 @@ deploy/.site-password
 
 # the record — the server owns it; refresh.sh syncs it both ways
 data/ledger.json
+
+# the shared injury sheet id — shipped to the server, kept out of git
+injury_sheet.txt

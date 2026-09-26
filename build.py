@@ -76,7 +76,10 @@ def main():
     # Absences move this week's margins only, never the season ratings.
     lost = injuries.get_nfl_injuries()
     injuries.apply(nfl_games, lost)
-    nfl_injuries = injuries.track(lost, nfl_games)
+    nfl_injuries = injuries.track(lost, nfl_games, "nfl")
+    lost = injuries.get_cfb_injuries(set(cfb_fpi))
+    injuries.apply(cfb_games, lost)
+    cfb_injuries = injuries.track(lost, cfb_games, "cfb")
 
     # Flag any FPI teams with no conference mapping (e.g. realignment/new FBS teams)
     unknown = sorted(t for t in cfb_fpi if t not in fb.CFB_CONF)
@@ -140,6 +143,7 @@ def main():
             .replace("__NFL_DATA__", j(nfl_rows))
             .replace("__NFL_GAMES__", j(nfl_games))
             .replace("__NFL_INJ__", j(nfl_injuries))
+            .replace("__CFB_INJ__", j(cfb_injuries))
             .replace("__SOURCES__", j(ds.SOURCES))
             .replace("__WEEK_ENDS_CFB__", j(ds.WEEK_ENDS.get("cfb", [])))
             .replace("__WEEK_ENDS_NFL__", j(ds.WEEK_ENDS.get("nfl", [])))

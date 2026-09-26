@@ -5,11 +5,12 @@ absence never touches a rating. It moves only the projected margin of games
 kicking off inside the coming week, which is the only window the status report
 describes — a player out today says nothing about a game three weeks away.
 
-A player counts when ESPN lists him Out or Doubtful and he has a value:
+A player counts when he is listed Out or Doubtful and he has a value:
 
-  data/injury_values.csv   the hand-kept list, league,team,player,position,
-                           points_if_out,note. A player on it is worth
-                           exactly what it says.
+  the hand-kept list       league,team,player,position,points_if_out,status,
+                           note — the shared Google Sheet named in
+                           injury_sheet.txt, plus data/injury_values.csv. A
+                           player on it is worth exactly what it says.
   QB1_DEFAULT              otherwise, only the starting quarterback (first on
                            ESPN's depth chart) counts, at a flat value. The
                            feed alone cannot tell a starter from a backup, and
@@ -19,21 +20,29 @@ A player counts when ESPN lists him Out or Doubtful and he has a value:
 Injured Reserve is left out on purpose. A player gone for weeks is already in
 the games FPI has rated since, so charging for him again would count him twice.
 
-College is not covered: ESPN's college injury feed carries a handful of players
-for the whole sport, so there is nothing to automate against.
+NFL status comes from ESPN's injury report; the list's status column is ignored
+there. College has no such report — ESPN's college feed carries a handful of
+players for the whole sport — so a college row counts only while the list
+itself says Out or Doubtful, and someone has to set it back when he returns.
 
 The adjustment is written into each ledger play, so whether it earns its place
 can be checked the same way the tilts were rather than believed.
 """
 import csv
 import datetime
+import io
 import json
 import os
+import urllib.request
 
 import data_sources as ds
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 VALUES_PATH = os.path.join(BASE, "data", "injury_values.csv")
+# The sheet's id or URL. Gitignored and shipped by deploy.sh; the sheet has to
+# be viewable by link for the server to read it.
+SHEET_FILE = os.path.join(BASE, "injury_sheet.txt")
+SHEET_CACHE = os.path.join(BASE, "data", "cache", "injury_sheet.csv")
 # When each priced absence was first seen, so the page can flag what is new.
 # Server-side state like the ledger: deploy.sh must not sync over it.
 SEEN_PATH = os.environ.get("INJURY_SEEN_PATH") or os.path.join(BASE, "data", "injury_seen.json")
@@ -47,21 +56,62 @@ MISSING = {"Out", "Doubtful"}
 QB1_DEFAULT = 3.0
 
 
-def load_values(path=VALUES_PATH):
-    """{(league, team, player): (points, note)} from the hand-kept list."""
-    vals = {}
-    if not os.path.exists(path):
-        return vals
-    with open(path, newline="", encoding="utf-8") as f:
-        for r in csv.DictReader(f):
+def _sheet_csv():
+    """The shared sheet as CSV text, or None. A sheet nobody can read comes
+    back as Google's sign-in page, which is refused rather than parsed; the
+    last good copy is used instead so one bad fetch cannot erase the list."""
+    ref = os.environ.get("INJURY_SHEET")
+    if not ref and os.path.exists(SHEET_FILE):
+        ref = open(SHEET_FILE).read().strip()
+    if not ref:
+        return None, None
+    sid = ref.split("/d/")[1].split("/")[0] if "/d/" in ref else ref
+    url = f"https://docs.google.com/spreadsheets/d/{sid}/export?format=csv"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            text = r.read().decode("utf-8-sig", errors="replace")
+        if not text.lower().lstrip().startswith("league,"):
+            raise ValueError("not the list — is the sheet shared by link?")
+        os.makedirs(os.path.dirname(SHEET_CACHE), exist_ok=True)
+        with open(SHEET_CACHE, "w", encoding="utf-8") as f:
+            f.write(text)
+        return text, "live"
+    except Exception as e:  # noqa: BLE001 — fall back to the last good copy
+        if os.path.exists(SHEET_CACHE):
+            return open(SHEET_CACHE, encoding="utf-8").read(), f"cache ({e})"
+        return None, f"unreadable ({e})"
+
+
+def load_rows():
+    """Every usable row of the hand-kept list: the sheet, then the local file."""
+    texts = []
+    sheet, mode = _sheet_csv()
+    if sheet:
+        texts.append(sheet)
+    if os.path.exists(VALUES_PATH):
+        texts.append(open(VALUES_PATH, newline="", encoding="utf-8").read())
+    rows = []
+    for text in texts:
+        for r in csv.DictReader(io.StringIO(text)):
+            r = {(k or "").strip().lower(): (v or "").strip() for k, v in r.items()}
             try:
-                pts = abs(float(r["points_if_out"]))
-            except (KeyError, TypeError, ValueError):
+                pts = abs(float(r.get("points_if_out")))
+            except (TypeError, ValueError):
                 continue
-            key = ((r.get("league") or "").strip().upper(), (r.get("team") or "").strip(),
-                   (r.get("player") or "").strip())
-            vals[key] = (pts, (r.get("note") or "").strip())
-    return vals
+            if not (r.get("team") and r.get("player")):
+                continue
+            rows.append({"league": r.get("league", "").upper(), "team": r["team"],
+                         "player": r["player"], "pos": r.get("position") or None,
+                         "pts": pts, "status": r.get("status", "").title(),
+                         "note": r.get("note", "")})
+    return rows, mode
+
+
+def load_values():
+    """{(league, team, player): (points, note)} from the hand-kept list."""
+    return {(r["league"], r["team"], r["player"]): (r["pts"], r["note"])
+            for r in load_rows()[0]}
 
 
 def _qb1(team_id):
@@ -84,7 +134,8 @@ def get_nfl_injuries():
     except Exception as e:  # noqa: BLE001 — an injury outage should not stop a build
         ds._report("NFL injuries (ESPN)", "fallback", f"none applied — {e}")
         return {}
-    vals = load_values()
+    vals = {(r["league"], r["team"], r["player"]): (r["pts"], r["note"])
+            for r in load_rows()[0] if r["league"] == "NFL"}
     lost = {}
     for t in feed.get("injuries") or []:
         team = t.get("displayName")
@@ -112,6 +163,49 @@ def get_nfl_injuries():
     return lost
 
 
+def _cfb_team(name, teams):
+    """The model's name for a team written either way: "Texas" or ESPN's
+    "Texas Longhorns" (mascot words dropped from the end until one matches)."""
+    if name in teams:
+        return name
+    if ds.canon(name) in teams:
+        return ds.canon(name)
+    words = name.split()
+    for n in range(len(words) - 1, 0, -1):
+        cand = " ".join(words[:n])
+        if cand in teams:
+            return cand
+        if ds.canon(cand) in teams:
+            return ds.canon(cand)
+    return None
+
+
+def get_cfb_injuries(teams):
+    """Same shape as get_nfl_injuries(), from the hand-kept list alone."""
+    rows, mode = load_rows()
+    lost, unknown = {}, set()
+    for r in rows:
+        if r["league"] != "CFB" or r["status"] not in MISSING:
+            continue
+        team = _cfb_team(r["team"], teams)
+        if not team:
+            unknown.add(r["team"])
+            continue
+        lost.setdefault(team, []).append(
+            {"player": r["player"], "pos": r["pos"], "status": r["status"],
+             "pts": r["pts"], "why": r["note"] or "on the list"})
+    n = sum(len(v) for v in lost.values())
+    detail = f"{n} absence(s) marked out across {len(lost)} team(s)"
+    if unknown:
+        detail += f"; team name not recognised: {', '.join(sorted(unknown))}"
+    if mode and mode != "live":
+        detail += f"; sheet {mode}"
+    ds._report("CFB injuries (hand list)",
+               "live" if mode in (None, "live")
+               else "fallback" if mode.startswith("unreadable") else "cache", detail)
+    return lost
+
+
 def apply(games, lost, horizon_days=7, now=None):
     """Write each affected game's adjustment onto it, as a home margin:
     `inj` is positive when the away side is the one missing players."""
@@ -134,9 +228,9 @@ def apply(games, lost, horizon_days=7, now=None):
     return touched
 
 
-def track(lost, games, now=None, path=SEEN_PATH):
+def track(lost, games, lg, now=None, path=SEEN_PATH):
     """The panel's rows: every priced absence, the game it moves and when it
-    was first seen. An absence that drops off the report is forgotten, so a
+    was first seen. An absence that drops off the list is forgotten, so a
     player hurt again later shows as new again."""
     now = now or datetime.datetime.now(datetime.timezone.utc)
     try:
@@ -144,13 +238,18 @@ def track(lost, games, now=None, path=SEEN_PATH):
             seen = json.load(f)
     except (OSError, ValueError):
         seen = {}
-    rows, keep = [], {}
+    # this league's entries are rebuilt below; the other league's stay put
+    keep = {k: v for k, v in seen.items() if not k.startswith(lg + "|")
+            and not (lg == "nfl" and k.count("|") == 1)}
+    rows = []
     for team, xs in lost.items():
         g = next((g for g in games if g.get("inj") is not None
                   and team in (g["home"], g["away"])), None)
         for x in xs:
-            k = f"{team}|{x['player']}"
-            keep[k] = seen.get(k) or now.isoformat(timespec="seconds")
+            k = f"{lg}|{team}|{x['player']}"
+            # keys written before college existed carried no league prefix
+            keep[k] = (seen.get(k) or (seen.get(f"{team}|{x['player']}") if lg == "nfl" else None)
+                       or now.isoformat(timespec="seconds"))
             rows.append(dict(x, team=team, first_seen=keep[k],
                              game=(f"{g['away']} @ {g['home']}" if g else None),
                              week=g["week"] if g else None,

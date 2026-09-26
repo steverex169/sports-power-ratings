@@ -129,6 +129,9 @@ Where this rating diverges most from FPI is where the market is most likely soft
 <span class="tag">Base: FPI (live)</span><span class="tag">Talent: 247</span><span class="tag">Portal: On3 net</span>
 <span class="tag">Ret. production: SP+/CBS</span><span class="tag" id="c-count"></span>
 
+<div class="injalert" id="c-injalert" hidden></div>
+<div class="sec">Injuries this week <span id="c-injn" style="font-weight:400;color:var(--ink2);font-size:13px"></span></div>
+<div class="card"><div id="c-inj"></div></div>
 <div class="sec">Big plays <span id="c-pwk" style="font-weight:400;color:var(--ink2);font-size:13px"></span></div>
 <div class="measured" id="c-pnote"></div>
 <div class="controls" style="margin-top:0">
@@ -287,6 +290,7 @@ const NFL_GAMES=__NFL_GAMES__;
 /* Priced absences, newest first: {team, player, pos, status, pts, why,
    first_seen, game, week, date}. Rebuilt every six hours on the server. */
 const NFL_INJ=__NFL_INJ__;
+const CFB_INJ=__CFB_INJ__;
 const SOURCES=__SOURCES__;
 const KEY_NUMBERS=__KEY_NUMBERS__;
 /* Injected from playrules.py so the card on screen and the record kept
@@ -426,6 +430,30 @@ function buildPlays(GAMES,rec,schedLine,mktInfo,tierOf,confOf){
   out.push({g,s,m,tier,conf,keys,span,score,
    getting:(m.side===m.fav?-m.line:m.line)});}
  return out.sort((x,y)=>y.score-x.score||y.m.pts-x.m.pts);}
+
+/* Injuries. "New" means first seen since this viewer last pressed "Got it",
+   or in the last 24 hours for someone who never has. The marker lives in this
+   browser only, so each viewer dismisses their own alert. */
+const NFL_INJ_EMPTY='No priced absences this week. The model charges a starting QB listed Out or Doubtful by ESPN, and anyone on the hand-kept list.';
+const CFB_INJ_EMPTY='No college absences marked. College has no public injury report, so only players set to Out or Doubtful on the shared injury sheet count.';
+function ago(iso){const m=Math.max(0,Math.round((Date.now()-new Date(iso).getTime())/60000));
+ return m<60?`${m}m ago`:m<2880?`${Math.round(m/60)}h ago`:`${Math.round(m/1440)}d ago`;}
+function renderInjuries(px,LIST,key,empty){
+ let since=null;try{since=localStorage.getItem(key);}catch(e){}
+ const cut=since?new Date(since).getTime():Date.now()-864e5;
+ const isNew=r=>new Date(r.first_seen).getTime()>cut;
+ const fresh=LIST.filter(isNew);
+ $('#'+px+'-injn').textContent=LIST.length?`— ${LIST.length} priced`:'';
+ $('#'+px+'-inj').innerHTML=LIST.length?LIST.map(r=>`<div class="inj">
+  <div><b>${r.player}</b> <span style="color:var(--ink2)">${r.pos?r.pos+' · ':''}${r.team}</span>${isNew(r)?'<span class="injnew">NEW</span>':''}
+   <div class="pmeta">${r.game?`${r.game} · wk ${r.week} · ${r.date}`:'no game inside the week'} · ${r.why} · first seen ${ago(r.first_seen)}</div></div>
+  <div style="text-align:right"><div class="num neg">\u2212${r.pts.toFixed(1)}</div><div class="pmeta">${r.status}</div></div></div>`).join('')
+  :`<div class="pempty">${empty}</div>`;
+ const al=$('#'+px+'-injalert');
+ if(!fresh.length){al.hidden=true;return;}
+ al.hidden=false;
+ al.innerHTML=`<b>\u26a0 ${fresh.length} new injur${fresh.length===1?'y':'ies'}</b><span>${fresh.map(r=>`${r.player} (${r.team}) ${r.status.toLowerCase()} \u2212${r.pts.toFixed(1)}`).join(' · ')}</span><button type="button">Got it</button>`;
+ al.querySelector('button').addEventListener('click',()=>{try{localStorage.setItem(key,new Date().toISOString());}catch(e){}renderInjuries(px,LIST,key,empty);});}
 
 function playRowHTML(r){
  const t=playTag(r.m.pts,r.tier);
@@ -669,7 +697,7 @@ function schedLine(g){
  const a=rec(g.away),h=rec(g.home);
  if(!g.fbs||!a||!h) return null;
  const hfa=g.site?0:h.hfa;
- const margin=myOf(h,g.week)-myOf(a,g.week)+hfa;
+ const margin=myOf(h,g.week)-myOf(a,g.week)+hfa+(g.inj||0);
  const fav=margin>=0?g.home:g.away;
  const unc=Math.round(Math.sqrt(a.band*a.band+h.band*h.band)*10)/10;
  return {fav,margin:+margin.toFixed(1),line:+Math.abs(margin).toFixed(1),unc};
@@ -707,7 +735,7 @@ function renderSched(){
   const mkt=m?`<b>${m.fav}</b> −${m.line.toFixed(1)}`:dash;
   const diff=m?`<span class="${m.diff>=0?'pos':'neg'}">${m.side} +${m.pts.toFixed(1)}</span>`:dash;
   return `<tr><td>${g.week}</td><td class="l" style="color:var(--ink2)">${g.date}</td>
-   <td class="l">${g.away} <span style="color:var(--muted)">@</span> <b>${g.home}</b>${g.note?` <span style="color:var(--muted);font-size:11px">${g.note}</span>`:''}</td>
+   <td class="l">${g.away} <span style="color:var(--muted)">@</span> <b>${g.home}</b>${g.note?` <span style="color:var(--muted);font-size:11px">${g.note}</span>`:''}${g.inj_note?`<br><span class="keyx" style="margin-left:0;background:color-mix(in srgb,var(--crit) 14%,transparent);color:var(--crit)" title="Already in the model's number">${g.inj_note}</span>`:''}</td>
    <td class="l" style="color:var(--ink2);font-size:12px">${site}</td>
    <td class="l">${favcell}</td>
    <td class="l" style="font-size:12px">${mkt}</td>
@@ -748,7 +776,7 @@ document.querySelectorAll('#c-pfilter button').forEach(b=>b.addEventListener('cl
 document.querySelectorAll('#c-regime button').forEach(b=>b.addEventListener('click',()=>{
  document.querySelectorAll('#c-regime button').forEach(x=>x.classList.remove('on'));
  b.classList.add('on');REG=b.dataset.r;panels();render();calc();renderSched();renderPlays();}));
-autoHFA();calc();panels();render();renderSched();renderPlays();
+autoHFA();calc();panels();render();renderSched();renderPlays();renderInjuries('c',CFB_INJ,'cfbInjSeenAt',CFB_INJ_EMPTY);
 })();
 
 /* ==================== NFL ==================== */
@@ -858,28 +886,6 @@ function renderPlays(){
 document.querySelectorAll('#n-regime button').forEach(b=>b.addEventListener('click',()=>{
  document.querySelectorAll('#n-regime button').forEach(x=>x.classList.remove('on'));b.classList.add('on');REG=b.dataset.r;
  panels();render();calc();renderSched();renderPlays();}));
-/* Injuries. "New" means first seen since this viewer last pressed "Got it",
-   or in the last 24 hours for someone who never has. The marker lives in this
-   browser only, so each viewer dismisses their own alert. */
-const SEEN_KEY='nflInjSeenAt';
-function seenAt(){try{return localStorage.getItem(SEEN_KEY);}catch(e){return null;}}
-function ago(iso){const m=Math.max(0,Math.round((Date.now()-new Date(iso).getTime())/60000));
- return m<60?`${m}m ago`:m<2880?`${Math.round(m/60)}h ago`:`${Math.round(m/1440)}d ago`;}
-function renderInjuries(){
- const since=seenAt(), cut=since?new Date(since).getTime():Date.now()-864e5;
- const isNew=r=>new Date(r.first_seen).getTime()>cut;
- const fresh=NFL_INJ.filter(isNew);
- $('#n-injn').textContent=NFL_INJ.length?`— ${NFL_INJ.length} priced`:'';
- $('#n-inj').innerHTML=NFL_INJ.length?NFL_INJ.map(r=>`<div class="inj">
-  <div><b>${r.player}</b> <span style="color:var(--ink2)">${r.pos||''} · ${r.team}</span>${isNew(r)?'<span class="injnew">NEW</span>':''}
-   <div class="pmeta">${r.game?`${r.game} · wk ${r.week} · ${r.date}`:'no game inside the week'} · ${r.why} · first seen ${ago(r.first_seen)}</div></div>
-  <div style="text-align:right"><div class="num neg">−${r.pts.toFixed(1)}</div><div class="pmeta">${r.status}</div></div></div>`).join('')
-  :'<div class="pempty">No priced absences this week. The model charges a starting QB listed Out or Doubtful, and anyone on the hand-kept list.</div>';
- const al=$('#n-injalert');
- if(!fresh.length){al.hidden=true;return;}
- al.hidden=false;
- al.innerHTML=`<b>⚠ ${fresh.length} new injur${fresh.length===1?'y':'ies'}</b><span>${fresh.map(r=>`${r.player} (${r.team.split(' ').pop()}) ${r.status.toLowerCase()} −${r.pts.toFixed(1)}`).join(' · ')}</span><button type="button" id="n-injok">Got it</button>`;
- $('#n-injok').addEventListener('click',()=>{try{localStorage.setItem(SEEN_KEY,new Date().toISOString());}catch(e){}renderInjuries();});}
-autoHFA();calc();panels();render();renderSched();renderPlays();renderInjuries();
+autoHFA();calc();panels();render();renderSched();renderPlays();renderInjuries('n',NFL_INJ,'nflInjSeenAt',NFL_INJ_EMPTY);
 })();
 </script></body></html>
