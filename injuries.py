@@ -34,8 +34,9 @@ import data_sources as ds
 BASE = os.path.dirname(os.path.abspath(__file__))
 VALUES_PATH = os.path.join(BASE, "data", "injury_values.csv")
 
-FEED = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries"
-DEPTH = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/{id}/depthcharts"
+# site.web.api, not site.api: the latter returns 403 to AWS ranges.
+FEED = "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/injuries"
+DEPTH = "https://site.web.api.espn.com/apis/site/v2/sports/football/nfl/teams/{id}/depthcharts"
 MISSING = {"Out", "Doubtful"}
 # Conservative on purpose: FPI may already carry part of a known absence, and
 # the market prices a starter-to-backup drop at several points more than this.
