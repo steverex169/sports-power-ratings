@@ -90,6 +90,7 @@ tr:hover td{background:color-mix(in srgb,var(--series1) 7%,transparent)}
 .keyx{font-size:10px;padding:1px 6px;border-radius:4px;background:color-mix(in srgb,var(--series1) 14%,transparent);color:var(--series1);font-weight:700;margin-left:6px}
 .pempty{color:var(--muted);padding:14px 2px}
 .injalert{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:18px 0 0;padding:10px 14px;border-radius:10px;border:1px solid color-mix(in srgb,var(--crit) 45%,transparent);background:color-mix(in srgb,var(--crit) 10%,transparent);font-size:13px}
+.injalert[hidden]{display:none}
 .injalert button{margin-left:auto;font:inherit;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--ink);cursor:pointer}
 .inj{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:9px 2px;border-bottom:1px solid var(--grid)}
 .inj:last-child{border-bottom:0}
@@ -130,9 +131,7 @@ Where this rating diverges most from FPI is where the market is most likely soft
 <span class="tag">Ret. production: SP+/CBS</span><span class="tag" id="c-count"></span>
 
 <div class="injalert" id="c-injalert" hidden></div>
-<div class="sec">Injuries this week <span id="c-injn" style="font-weight:400;color:var(--ink2);font-size:13px"></span></div>
-<div class="card"><div id="c-inj"></div></div>
-<div class="sec">Big plays <span id="c-pwk" style="font-weight:400;color:var(--ink2);font-size:13px"></span></div>
+<div class="sec">This week's plays <span id="c-pwk" style="font-weight:400;color:var(--ink2);font-size:13px"></span></div>
 <div class="measured" id="c-pnote"></div>
 <div class="controls" style="margin-top:0">
 <span class="seg" id="c-pfilter"><button data-p="rec" class="on">Recommended only</button><button data-p="all">Include G5 no-bets</button></span>
@@ -145,6 +144,22 @@ Where this rating diverges most from FPI is where the market is most likely soft
 <div class="edgegrid" style="margin-top:16px">
 <div class="card ecard"><h3>By size of edge</h3><div id="c-tbuckets"></div></div>
 <div class="card ecard"><h3>Graded plays</h3><div id="c-tplays"></div></div></div>
+
+<div class="sec">Injuries this week <span id="c-injn" style="font-weight:400;color:var(--ink2);font-size:13px"></span></div>
+<div class="card"><div id="c-inj"></div></div>
+
+<div class="sec">Full ratings</div>
+<div class="controls">
+<input id="c-q" placeholder="Search team…" style="min-width:160px">
+<select id="c-fconf"><option value="">All conferences</option></select>
+<select id="c-fconflvl"><option value="">All confidence</option><option>High</option><option>Med</option><option value="Low+">Low+</option><option>Low</option></select>
+<span class="legend"><span><span class="sw" style="background:var(--good)"></span>model &gt; FPI</span><span><span class="sw" style="background:var(--crit)"></span>model &lt; FPI</span></span></div>
+<div class="card" style="padding:6px 12px;max-height:620px;overflow:auto"><table id="c-tbl"><thead><tr>
+<th data-k="rank">#</th><th class="l" data-k="team">Team</th><th class="l" data-k="conf">Conf</th>
+<th data-k="fpi">FPI</th><th data-k="my">My Rating</th><th class="l" data-k="edge">Edge</th>
+<th data-k="retprod">Ret%</th><th data-k="portal">Portal</th><th data-k="talent">Talent</th>
+<th class="l" data-k="conf_lvl">Conf.</th></tr></thead><tbody id="c-tb"></tbody></table></div>
+
 
 <div class="sec">Matchup spread calculator <span style="font-weight:400;color:var(--ink2);font-size:13px">— venue-specific home field</span></div>
 <div class="card"><div class="calc">
@@ -184,18 +199,6 @@ beat a number.</div>
 <div class="card ecard"><h3>▲ <span class="pos">Model rates higher than FPI</span></h3><div id="c-buy"></div></div>
 <div class="card ecard"><h3>▼ <span class="neg">Model rates lower than FPI</span></h3><div id="c-fade"></div></div></div>
 
-<div class="sec">Full ratings</div>
-<div class="controls">
-<input id="c-q" placeholder="Search team…" style="min-width:160px">
-<select id="c-fconf"><option value="">All conferences</option></select>
-<select id="c-fconflvl"><option value="">All confidence</option><option>High</option><option>Med</option><option value="Low+">Low+</option><option>Low</option></select>
-<span class="legend"><span><span class="sw" style="background:var(--good)"></span>model &gt; FPI</span><span><span class="sw" style="background:var(--crit)"></span>model &lt; FPI</span></span></div>
-<div class="card" style="padding:6px 12px;max-height:620px;overflow:auto"><table id="c-tbl"><thead><tr>
-<th data-k="rank">#</th><th class="l" data-k="team">Team</th><th class="l" data-k="conf">Conf</th>
-<th data-k="fpi">FPI</th><th data-k="my">My Rating</th><th class="l" data-k="edge">Edge</th>
-<th data-k="retprod">Ret%</th><th data-k="portal">Portal</th><th data-k="talent">Talent</th>
-<th class="l" data-k="conf_lvl">Conf.</th></tr></thead><tbody id="c-tb"></tbody></table></div>
-
 <div class="foot"><b>How the number is built.</b> MyRating = FPI + TalentTilt + PortalAdj + RetProdAdj. Talent pulls FPI toward a tier-specific talent-implied rating (separate Power-4 and G5 fits). Portal adds points per On3 net-movement unit. Returning production adds points for production above the national average, plus a QB flag (returning / transfer / new). Each rating carries a ± band that widens when signals are missing or conflict. The weighting toggle rescales all tilts. Spread calculator uses venue-specific HFA (altitude &amp; crowd), anchored near 2.5. Preseason tilts decay with the calendar: held flat through wk 2 then faded to a floor, a schedule measured by replaying 2,262 games of point-in-time FPI (backtest.py). FPI itself refreshes weekly, so late-season lines lean on it. Not yet modeled: coaching changes, injuries, schedule strength; weights are sensitivity-tested, not backtested.
 <div class="srcs" id="c-srcs"></div>
 <div class="disc"><b>For research and entertainment only — not betting or financial advice.</b> Markets are efficient; no model beats them reliably — and this one has been measured, not assumed, to fall short of the closing line. It is a tool for finding disagreements worth understanding.</div></div>
@@ -211,9 +214,7 @@ The headline number is <b>model vs. the win-total market</b> — where the softe
 <span class="tag">Regression: 2025 luck</span><span class="tag">32 teams</span>
 
 <div class="injalert" id="n-injalert" hidden></div>
-<div class="sec">Injuries this week <span id="n-injn" style="font-weight:400;color:var(--ink2);font-size:13px"></span></div>
-<div class="card"><div id="n-inj"></div></div>
-<div class="sec">Big plays <span id="n-pwk" style="font-weight:400;color:var(--ink2);font-size:13px"></span></div>
+<div class="sec">This week's plays <span id="n-pwk" style="font-weight:400;color:var(--ink2);font-size:13px"></span></div>
 <div class="measured" id="n-pnote"></div>
 <div class="card"><div class="plays" id="n-plays"></div></div>
 
@@ -223,6 +224,18 @@ The headline number is <b>model vs. the win-total market</b> — where the softe
 <div class="edgegrid" style="margin-top:16px">
 <div class="card ecard"><h3>By size of edge</h3><div id="n-tbuckets"></div></div>
 <div class="card ecard"><h3>Graded plays</h3><div id="n-tplays"></div></div></div>
+
+<div class="sec">Injuries this week <span id="n-injn" style="font-weight:400;color:var(--ink2);font-size:13px"></span></div>
+<div class="card"><div id="n-inj"></div></div>
+
+<div class="sec">Full ratings</div>
+<div class="controls"><input id="n-q" placeholder="Search team…" style="min-width:170px">
+<span class="legend"><span><span class="sw" style="background:var(--good)"></span>model &gt; market</span><span><span class="sw" style="background:var(--crit)"></span>model &lt; market</span></span></div>
+<div class="card" style="padding:6px 12px;max-height:600px;overflow:auto"><table id="n-tbl"><thead><tr>
+<th data-k="rank">#</th><th class="l" data-k="team">Team</th><th data-k="fpi">FPI</th><th data-k="my">My Rating</th>
+<th class="l" data-k="edge">Edge vs Mkt</th><th data-k="win">Win Tot</th><th data-k="reg">Reg</th><th data-k="qb">QB</th><th data-k="ros">Roster</th>
+</tr></thead><tbody id="n-tb"></tbody></table></div>
+
 
 <div class="sec">Matchup spread calculator</div>
 <div class="card"><div class="calc">
@@ -269,15 +282,7 @@ break-even. Method and numbers are in <code>backtest.py</code>.</div>
 <div class="card ecard"><h3>▲ <span class="pos">Model rates higher than market</span></h3><div id="n-buy"></div></div>
 <div class="card ecard"><h3>▼ <span class="neg">Model rates lower than market</span></h3><div id="n-fade"></div></div></div>
 
-<div class="sec">Full ratings</div>
-<div class="controls"><input id="n-q" placeholder="Search team…" style="min-width:170px">
-<span class="legend"><span><span class="sw" style="background:var(--good)"></span>model &gt; market</span><span><span class="sw" style="background:var(--crit)"></span>model &lt; market</span></span></div>
-<div class="card" style="padding:6px 12px;max-height:600px;overflow:auto"><table id="n-tbl"><thead><tr>
-<th data-k="rank">#</th><th class="l" data-k="team">Team</th><th data-k="fpi">FPI</th><th data-k="my">My Rating</th>
-<th class="l" data-k="edge">Edge vs Mkt</th><th data-k="win">Win Tot</th><th data-k="reg">Reg</th><th data-k="qb">QB</th><th data-k="ros">Roster</th>
-</tr></thead><tbody id="n-tb"></tbody></table></div>
-
-<div class="foot"><b>How the number is built.</b> MyRating = FPI + regime × (RegTilt + QBAdj + RosterAdj). RegTilt = −(0.06 × 2025 turnover margin + 0.40 × close-game luck), capped ±2.5 — fades teams whose record/margin was luck-inflated, buys the unlucky. QBAdj: star QB back from injury +0.6 to +1.3, clear new-QB downgrade −1.2 to −1.5, unsettled battle 0 (wider band). Roster: ±0.5–0.8. Market rating is implied from 2026 win totals; "Edge vs Mkt" is MyRating minus that. Tilts are deliberately small because NFL FPI and the market are both sharp. Injuries: a player ESPN lists Out or Doubtful moves that week's margin only — by his value on the hand-kept list, or 3.0 for a starting QB not on it. Injured Reserve is left to FPI, which has already rated the games without him. NFL HFA ~1.8 and noisy. Preseason tilts are held flat through wk 9 then faded — the NFL window measured over 816 games in backtest.py. FPI itself refreshes weekly.
+<div class="foot"><b>How the number is built.</b> MyRating = FPI + regime × (RegTilt + QBAdj + RosterAdj). RegTilt = −(0.06 × 2025 turnover margin + 0.40 × close-game luck), capped ±2.5 — fades teams whose record/margin was luck-inflated, buys the unlucky. QBAdj: star QB back from injury +0.6 to +1.3, clear new-QB downgrade −1.2 to −1.5, unsettled battle 0 (wider band). Roster: ±0.5–0.8. Market rating is implied from 2026 win totals; "Edge vs Mkt" is MyRating minus that. Tilts are deliberately small because NFL FPI and the market are both sharp. Injuries: only quarterbacks and offensive-line clusters, and only that week's margin. A QB ESPN lists Out or Doubtful costs his own value (starter over backup, from the QB list), or 3.0 for a starter not on it. Two offensive-line starters out cost 1.0 together, three 2.0, four or more 3.0; one alone is absorbed. Starters come from snap counts, not the depth chart, which demotes an injured starter. Injured Reserve counts only while the player started one of the last two games; after that FPI has rated games without him. NFL HFA ~1.8 and noisy. Preseason tilts are held flat through wk 9 then faded — the NFL window measured over 816 games in backtest.py. FPI itself refreshes weekly.
 <div class="srcs" id="n-srcs"></div>
 <div class="disc"><b>For research and entertainment only — not betting or financial advice.</b> NFL markets are highly efficient; no model beats them reliably.</div></div>
 </div>
@@ -409,8 +414,12 @@ function starHTML(s){
    NFL, where there is no tier rule to apply. */
 function buildPlays(GAMES,rec,schedLine,mktInfo,tierOf,confOf){
  const out=[], now=Date.now();
+ /* This week only: the week of the next game still to kick off. A Monday
+    night game keeps its week on the board until it starts. */
+ const ahead=GAMES.filter(g=>g.iso&&new Date(g.iso).getTime()>now&&g.fbs!==false).map(g=>g.week);
+ const wk=ahead.length?Math.min(...ahead):null;
  for(const g of GAMES){
-  if(g.mkt==null) continue;
+  if(g.mkt==null||g.week!==wk) continue;
   /* Filter on kickoff, not week number. The rebuild runs Monday morning, when
      the week has not turned over but its Sunday games are already played and
      the market feed still carries their closing lines — a week-based filter
@@ -765,7 +774,7 @@ function renderPlays(){
  const p4=all.filter(r=>r.tier==='P4');
  const rows=PF==='rec'?p4:all;
  const box=$('#c-plays');
- $('#c-pwk').textContent=all.length?`— ${all.length} qualify, ${p4.length} recommended`:'';
+ $('#c-pwk').textContent=all.length?`— week ${all[0].g.week}, ${all.length} qualify, ${p4.length} recommended`:'';
  $('#c-pnote').innerHTML=PLAY_NOTE+` A game with a G5 team on either side is graded but never advised.`;
  if(!all.length){box.innerHTML='<div class="pempty">No priced game clears the bar this build. Books post the slate a few days out, so this fills in as the week approaches.</div>';return;}
  if(!rows.length){box.innerHTML='<div class="pempty">Nothing recommended — every qualifying game this week has a G5 team in it.</div>';return;}
@@ -879,7 +888,7 @@ document.querySelectorAll('#n-sched th').forEach(th=>th.addEventListener('click'
    expectation is lower. */
 function renderPlays(){
  const all=buildPlays(GAMES,rec,schedLine,mktInfo,null,null);
- $('#n-pwk').textContent=all.length?`— ${all.length} qualify`:'';
+ $('#n-pwk').textContent=all.length?`— week ${all[0].g.week}, ${all.length} qualify`:'';
  $('#n-pnote').innerHTML=PLAY_NOTE;
  $('#n-plays').innerHTML=all.length?all.slice(0,20).map(playRowHTML).join('')
   :'<div class="pempty">No priced game clears the bar this build — closing lines arrive week by week, so this fills in as the season runs.</div>';}
