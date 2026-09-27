@@ -2,8 +2,8 @@
 
 Automated CFB + NFL power-ratings dashboard covering the **full regular
 season** — CFB weeks 0-15 and NFL weeks 1-18, with a projected line for every
-game. A GitHub Action rebuilds it weekly from US-based runners (avoiding
-regional API blocks) and publishes it to GitHub Pages.
+game. It is hosted on an EC2 box behind a password, which rebuilds it every
+6 hours (see `deploy/`).
 
 ## How it works
 
@@ -52,13 +52,10 @@ python3 -m venv .venv && .venv/bin/pip install numpy pandas
 
 ## Automation
 
-`.github/workflows/build.yml` rebuilds and redeploys the dashboard:
-- weekly on a schedule (Mondays, after the post-weekend FPI refresh),
-- on every push to `main`,
-- on demand via the **Actions → Run workflow** button.
-
-Optional: add a `CFBD_API_KEY` repository secret (free key from
-collegefootballdata.com) to switch talent + returning production from
-snapshot to live.
+`deploy/deploy.sh` ships the project to the server and provisions it: Caddy
+serves the page behind basic auth, and a systemd timer runs `build.py` every
+6 hours (00/06/12/18 UTC). `deploy/refresh.sh` builds locally and ships the
+page for an out-of-cycle refresh. Put a `CFBD_API_KEY` in `cfbd_key.txt` on
+the server to take talent + returning production live.
 
 *For research and entertainment only — not betting advice.*
