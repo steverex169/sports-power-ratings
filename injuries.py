@@ -54,6 +54,30 @@ MISSING = {"Out", "Doubtful"}
 # Conservative on purpose: FPI may already carry part of a known absence, and
 # the market prices a starter-to-backup drop at several points more than this.
 QB1_DEFAULT = 3.0
+# One lineman out is absorbed; several at once is what breaks a line. Points
+# by how many offensive-line starters are missing, capped at the last entry.
+# Judgment, not fitted — the ledger records them so they can be tested.
+OL_CLUSTER = {2: 1.0, 3: 2.0, 4: 3.0}
+OL_POS = {"OT", "G", "C", "OL", "T"}
+# Who actually starts, from snap counts. ESPN's depth chart is no use for this:
+# it moves an injured starter down (Dart sat third behind Winston), so by the
+# time he is Out it no longer says he was the starter.
+SNAPS = "https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_{year}.csv"
+STARTER_PCT = 0.5   # share of offensive snaps that makes a starter
+STARTER_GAMES = 2   # counted over the team's most recent games
+NV_TEAM = {
+    "ARI": "Arizona Cardinals", "ATL": "Atlanta Falcons", "BAL": "Baltimore Ravens",
+    "BUF": "Buffalo Bills", "CAR": "Carolina Panthers", "CHI": "Chicago Bears",
+    "CIN": "Cincinnati Bengals", "CLE": "Cleveland Browns", "DAL": "Dallas Cowboys",
+    "DEN": "Denver Broncos", "DET": "Detroit Lions", "GB": "Green Bay Packers",
+    "HOU": "Houston Texans", "IND": "Indianapolis Colts", "JAX": "Jacksonville Jaguars",
+    "KC": "Kansas City Chiefs", "LA": "Los Angeles Rams", "LAC": "Los Angeles Chargers",
+    "LV": "Las Vegas Raiders", "MIA": "Miami Dolphins", "MIN": "Minnesota Vikings",
+    "NE": "New England Patriots", "NO": "New Orleans Saints", "NYG": "New York Giants",
+    "NYJ": "New York Jets", "PHI": "Philadelphia Eagles", "PIT": "Pittsburgh Steelers",
+    "SEA": "Seattle Seahawks", "SF": "San Francisco 49ers", "TB": "Tampa Bay Buccaneers",
+    "TEN": "Tennessee Titans", "WAS": "Washington Commanders",
+}
 
 
 def _sheet_csv():
@@ -127,8 +151,58 @@ def _qb1(team_id):
     return None
 
 
+def _norm(name):
+    """A name as both feeds agree on it: ESPN writes "Anthony Richardson Sr.",
+    nflverse "Anthony Richardson"."""
+    words = (name or "").lower().replace(".", "").replace("'", "").split()
+    while words and words[-1] in {"jr", "sr", "ii", "iii", "iv", "v"}:
+        words.pop()
+    return " ".join(words)
+
+
+def _starters(now=None):
+    """{team: {"QB": names, "OL": names, "QB1": name}} from snap counts. QB and
+    OL are everyone who took STARTER_PCT of the offensive snaps in any of the
+    team's last STARTER_GAMES games; QB1 is whoever took the most in the latest
+    one. Empty when the snap file is out of reach — the depth chart then stands
+    in for QBs and no line cluster is priced."""
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    year = now.year if now.month >= 3 else now.year - 1
+    try:
+        text, _ = ds.http_get_text(SNAPS.format(year=year), f"nfl_snaps_{year}.csv")
+    except Exception:  # noqa: BLE001
+        return {}
+    rows = [r for r in csv.DictReader(io.StringIO(text)) if r.get("game_type") == "REG"]
+    weeks = {}
+    for r in rows:
+        weeks.setdefault(r["team"], set()).add(int(r["week"]))
+    out, top = {}, {}
+    for r in rows:
+        team = NV_TEAM.get(r["team"])
+        recent = sorted(weeks[r["team"]])[-STARTER_GAMES:]
+        if not team or int(r["week"]) not in recent:
+            continue
+        try:
+            pct = float(r["offense_pct"])
+        except ValueError:
+            continue
+        pos = "QB" if r["position"] == "QB" else "OL" if r["position"] in OL_POS else None
+        if not pos:
+            continue
+        st = out.setdefault(team, {"QB": set(), "OL": set(), "QB1": None})
+        if pct >= STARTER_PCT:
+            st[pos].add(_norm(r["player"]))
+        if pos == "QB" and int(r["week"]) == recent[-1] and pct > top.get(team, 0):
+            top[team], st["QB1"] = pct, _norm(r["player"])
+    return out
+
+
 def get_nfl_injuries():
-    """{team: [{player, pos, status, pts, why}, ...]} for absences that move the line."""
+    """{team: [{player, pos, status, pts, why}, ...]} for absences that move the line.
+
+    Out or Doubtful counts. Injured Reserve counts only while the player still
+    started one of the team's last STARTER_GAMES games: after that FPI has
+    rated games without him, and charging him again would count him twice."""
     try:
         feed, mode = ds.http_get_json(FEED, "nfl_injuries")
     except Exception as e:  # noqa: BLE001 — an injury outage should not stop a build
@@ -136,30 +210,50 @@ def get_nfl_injuries():
         return {}
     vals = {(r["league"], r["team"], r["player"]): (r["pts"], r["note"])
             for r in load_rows()[0] if r["league"] == "NFL"}
+    starters = _starters()
     lost = {}
     for t in feed.get("injuries") or []:
         team = t.get("displayName")
-        missing = [(i["athlete"].get("displayName"),
-                    (i["athlete"].get("position") or {}).get("abbreviation"), i["status"])
-                   for i in t.get("injuries") or []
-                   if i.get("status") in MISSING and i.get("athlete")]
+        st = starters.get(team, {"QB": set(), "OL": set(), "QB1": None})
+        recent = st["QB"] | st["OL"]
+        missing = []
+        for i in t.get("injuries") or []:
+            a = i.get("athlete")
+            if not a:
+                continue
+            name, status = a.get("displayName"), i.get("status")
+            if status in MISSING or (status == "Injured Reserve" and _norm(name) in recent):
+                missing.append((name, (a.get("position") or {}).get("abbreviation"), status))
         if not missing:
             continue
         qb1 = _qb1(t.get("id")) if any(p == "QB" for _, p, _ in missing) else None
+        line = []
         for name, pos, status in missing:
             v = vals.get(("NFL", team, name))
             if v:
                 pts, why = v[0], v[1] or "on the list"
-            elif pos == "QB" and name == qb1:
+            elif pos == "QB" and (name == qb1 or _norm(name) == st["QB1"]):
                 pts, why = QB1_DEFAULT, "starting QB"
+            elif pos in OL_POS and _norm(name) in st["OL"]:
+                line.append((name, pos, status))
+                continue
             else:
                 continue
             lost.setdefault(team, []).append(
                 {"player": name, "pos": pos, "status": status, "pts": pts, "why": why})
+        if len(line) >= min(OL_CLUSTER):
+            total = OL_CLUSTER[min(len(line), max(OL_CLUSTER))]
+            for name, pos, status in line:
+                lost.setdefault(team, []).append(
+                    {"player": name, "pos": pos, "status": status,
+                     "pts": round(total / len(line), 2),
+                     "why": f"OL cluster: {len(line)} line starters out, −{total:.1f} together"})
     n = sum(len(v) for v in lost.values())
     ds._report("NFL injuries (ESPN)", "live" if mode == "live" else mode,
-               f"{n} absence(s) priced across {len(lost)} team(s)"
-               + (f", {len(vals)} valued by hand" if vals else ", starting QBs only"))
+               f"{n} absence(s) priced across {len(lost)} team(s); "
+               + (f"starters from snap counts ({len(starters)} teams)" if starters
+                  else "snap counts unavailable, QB1 from depth chart, no OL clusters")
+               + (f", {len(vals)} QBs valued by list" if vals else ""))
     return lost
 
 

@@ -1,1 +1,34 @@
 league,team,player,position,points_if_out,status,note
+NFL,Arizona Cardinals,Jacoby Brissett,QB,1,,backup Gardner Minshew II
+NFL,Atlanta Falcons,Michael Penix Jr.,QB,1.5,,backup Tua Tagovailoa
+NFL,Baltimore Ravens,Lamar Jackson,QB,7,,backup Tyler Huntley
+NFL,Buffalo Bills,Josh Allen,QB,7.5,,backup Kyle Allen
+NFL,Carolina Panthers,Bryce Young,QB,1.5,,backup Kenny Pickett
+NFL,Chicago Bears,Caleb Williams,QB,3.5,,backup Tyson Bagent
+NFL,Cincinnati Bengals,Joe Burrow,QB,5,,backup Joe Flacco
+NFL,Cleveland Browns,Deshaun Watson,QB,1,,backup Shedeur Sanders
+NFL,Dallas Cowboys,Dak Prescott,QB,5.5,,backup Sam Howell
+NFL,Denver Broncos,Bo Nix,QB,4,,backup Jarrett Stidham
+NFL,Detroit Lions,Jared Goff,QB,5,,backup Joshua Dobbs
+NFL,Green Bay Packers,Jordan Love,QB,4.5,,backup Tyrod Taylor
+NFL,Houston Texans,C.J. Stroud,QB,4,,backup Davis Mills
+NFL,Indianapolis Colts,Daniel Jones,QB,2,,backup Anthony Richardson Sr.
+NFL,Jacksonville Jaguars,Trevor Lawrence,QB,4,,backup Quinn Ewers
+NFL,Kansas City Chiefs,Patrick Mahomes,QB,6.5,,backup Justin Fields
+NFL,Las Vegas Raiders,Kirk Cousins,QB,1.5,,backup Fernando Mendoza
+NFL,Los Angeles Chargers,Justin Herbert,QB,6,,backup Trey Lance
+NFL,Los Angeles Rams,Matthew Stafford,QB,6,,backup Stetson Bennett IV
+NFL,Miami Dolphins,Malik Willis,QB,1.5,,backup Kyle McCord
+NFL,Minnesota Vikings,Kyler Murray,QB,3,,backup Carson Wentz
+NFL,New England Patriots,Drake Maye,QB,5.5,,backup Tommy DeVito
+NFL,New Orleans Saints,Tyler Shough,QB,1.5,,backup Spencer Rattler
+NFL,New York Giants,Jaxson Dart,QB,3,,injured starter; backup Jameis Winston
+NFL,New York Giants,Jameis Winston,QB,2,,starting for Dart; backup Jake Haener
+NFL,New York Jets,Geno Smith,QB,2.5,,backup Cade Klubnik
+NFL,Philadelphia Eagles,Jalen Hurts,QB,4.5,,backup Andy Dalton
+NFL,Pittsburgh Steelers,Aaron Rodgers,QB,3,,backup Mason Rudolph
+NFL,San Francisco 49ers,Brock Purdy,QB,4,,backup Mac Jones
+NFL,Seattle Seahawks,Sam Darnold,QB,3.5,,backup Drew Lock
+NFL,Tampa Bay Buccaneers,Baker Mayfield,QB,5,,backup Jalon Daniels
+NFL,Tennessee Titans,Cam Ward,QB,2,,backup Mitchell Trubisky
+NFL,Washington Commanders,Jayden Daniels,QB,4.5,,backup Marcus Mariota
