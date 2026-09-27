@@ -585,6 +585,17 @@ function recCard(lab,r){
   <div class="val">${r.w}\u2013${r.l}${r.push?`<span style="font-size:12px;color:var(--muted);font-weight:400"> +${r.push}P</span>`:''}</div>
   <div class="pct ${pctCls(r.pct)}">${r.pct}%<span style="color:var(--ink2);font-weight:400"> \u00b7 95% ${ciTxt(r)} \u00b7 n=${r.n}</span></div></div>`;}
 
+/* Closing-line value. A play that got a better number than the market closed
+   at is a good play whatever the score, and that shows in tens of plays where
+   win-loss needs thousands. 50% is what no edge looks like. */
+function clvCard(c){
+ if(!c||!(c.beat+c.worse)) return `<div class="reccard"><div class="lab">Beat the closing line</div>
+  <div class="val" style="color:var(--muted)">—</div>
+  <div class="pct" style="color:var(--muted);font-weight:400">no closing lines yet</div></div>`;
+ return `<div class="reccard"><div class="lab">Beat the closing line</div>
+  <div class="val">${c.beat} of ${c.beat+c.worse}</div>
+  <div class="pct ${c.pct>50?'pos':'neg'}">${c.pct}%<span style="color:var(--ink2);font-weight:400"> \u00b7 avg ${c.avg>0?'+':''}${c.avg} pts \u00b7 ${c.same} unmoved</span></div></div>`;}
+
 function bucketRows(list){
  const rows=(list||[]).filter(b=>b.n);
  if(!rows.length) return '<div class="pempty">Nothing graded yet.</div>';
@@ -611,6 +622,7 @@ function renderTracker(lg,px){
   cards.push(recCard('Recommended (P4 + NFL)',T.recommended));
  }
  cards.push(recCard('Every play, both sports',T.overall));
+ cards.push(clvCard(S.clv));
  $('#'+px+'-trec').innerHTML=cards.join('');
  $('#'+px+'-tbuckets').innerHTML=bucketRows(S.by_bucket);
  $('#'+px+'-tplays').innerHTML=gradedRows((T.recent||[]).filter(p=>p.lg===lg));
@@ -621,7 +633,8 @@ function renderTracker(lg,px){
   +`<b>${n}</b> ${lg.toUpperCase()} play${n===1?'':'s'} graded so far, ${pend} pending. `
   +`Break-even at -110 is <b>${BE}%</b>, and the range next to each figure is the 95% interval \u2014 `
   +`separating a real ${BE}% edge from a losing 48% takes on the order of <b>${need.toLocaleString()}</b> graded plays, `
-  +`so treat everything here as early.`;}
+  +`so treat everything here as early. <b>Beat the closing line</b> is the faster test: how often the market moved `
+  +`toward the side taken between the pick and kickoff. Above 50% is an edge showing up long before the record can.`;}
 
 /* Both cards read the same ledger; the elements are static, so this runs now. */
 renderTracker('cfb','c');renderTracker('nfl','n');

@@ -122,6 +122,7 @@ def main():
         # is not a number anyone could have taken.
         plays = playrules.build_plays(lg, games, rows, horizon_days=7, mass=mass)
         added += ledger.record(led, lg, plays, built_iso)
+        ledger.track_close(led, lg, games, built_iso)
     graded = ledger.grade(led, year, ds.get_results)
     ledger.save(led)
     tracker = ledger.summary(led)

@@ -14,6 +14,7 @@ was fixed before the result existed.
     .venv/bin/python ledger.py --path X   # against a different ledger file
 """
 import argparse
+import datetime
 import json
 import os
 
@@ -62,6 +63,45 @@ def record(d, lg, plays, seen_iso):
     return added
 
 
+def track_close(d, lg, games, now_iso):
+    """Keep each play's closing line: the last market number seen before
+    kickoff. The number the play was taken at never changes; `close` is the
+    one thing besides the result that a later build may fill in.
+
+    College lines come live from the book, which pulls a game at kickoff (and
+    could be showing in-game odds after it), so they stop updating then — the
+    close is the last 6-hourly capture. nflverse's NFL number is the closing
+    line itself once a game is played, so NFL keeps reading it until graded,
+    and a play graded before this existed takes it once."""
+    by = {(g["week"], g["away"], g["home"]): g for g in games}
+    now = datetime.datetime.fromisoformat(now_iso)
+    n = 0
+    for p in d["plays"].values():
+        if p["lg"] != lg:
+            continue
+        if p.get("ats") is not None and not (lg == "nfl" and "close" not in p):
+            continue
+        g = by.get((p["week"], p["away"], p["home"]))
+        if not g or g.get("mkt") is None:
+            continue
+        if lg != "nfl":
+            ko = g.get("iso")
+            if not ko or datetime.datetime.fromisoformat(ko.replace("Z", "+00:00")) <= now:
+                continue
+        p["close"] = float(g["mkt"])
+        n += 1
+    return n
+
+
+def clv(p):
+    """Points the market moved toward the side taken, from the number the play
+    was recorded at to the close. Positive = the play beat the closing line."""
+    if p.get("close") is None:
+        return None
+    move = p["close"] - p["mkt"]
+    return round(move if p["side"] == p["home"] else -move, 1) + 0.0
+
+
 def grade(d, year, fetch):
     """Fill in results for plays whose games have finished.
 
@@ -107,6 +147,18 @@ def _rec(sel):
             "pct": round(100 * w / n, 1) if n else None}
 
 
+def _clv(sel):
+    """How often the close moved toward the play. Only finished games count,
+    so every close here is final."""
+    xs = [clv(p) for p in sel if p.get("ats") and p.get("close") is not None]
+    beat = sum(1 for x in xs if x > 0)
+    worse = sum(1 for x in xs if x < 0)
+    n = beat + worse
+    return {"n": len(xs), "beat": beat, "worse": worse, "same": len(xs) - n,
+            "pct": round(100 * beat / n, 1) if n else None,
+            "avg": round(sum(xs) / len(xs), 2) if xs else None}
+
+
 def summary(d, recent=25):
     """Aggregates for the dashboard. Only graded plays count toward a record;
     everything else is reported as pending so the two are never conflated."""
@@ -117,6 +169,7 @@ def summary(d, recent=25):
     def split(sel):
         return {
             "all": _rec(sel),
+            "clv": _clv(sel),
             "by_bucket": [dict(_rec([p for p in sel
                                      if lo <= p["abs_edge"] < hi]), bucket=lab)
                           for lab, lo, hi in playrules.BUCKETS],
@@ -130,14 +183,18 @@ def summary(d, recent=25):
         "break_even": playrules.BREAK_EVEN,
         "graded": len(graded), "pending": len(pending),
         "overall": _rec(graded),
+        "clv": _clv(graded),
         "cfb": split(cfb),
         "nfl": split([p for p in graded if p["lg"] == "nfl"]),
         "recommended": _rec([p for p in graded if p["lg"] == "nfl"
                              or p.get("tier") == "P4"]),
         "p4": _rec([p for p in cfb if p.get("tier") == "P4"]),
         "g5": _rec([p for p in cfb if p.get("tier") == "G5"]),
-        "recent": sorted(graded, key=lambda p: (p["week"], p["lg"]),
-                         reverse=True)[:recent],
+        # per league: college weeks run ahead of the NFL's, so one shared
+        # cut filled every slot with college and left the NFL list empty
+        "recent": [p for lg in ("cfb", "nfl")
+                   for p in sorted((p for p in graded if p["lg"] == lg),
+                                   key=lambda p: p["week"], reverse=True)[:recent]],
         "upcoming": sorted(pending, key=lambda p: -p["stars"])[:recent],
     }
     return out
@@ -163,6 +220,11 @@ def main():
     print(_line("Recommended (P4 + NFL)", s["recommended"]))
     print(_line("CFB Power-4", s["p4"]))
     print(_line("CFB G5 (no-bet)", s["g5"]))
+    c = s["clv"]
+    if c["n"]:
+        print(f"\n  Beat the closing line      {c['beat']} of {c['beat'] + c['worse']}"
+              f" ({c['pct']}%), {c['same']} unmoved, average {c['avg']:+.2f} pts"
+              f"   (50% = no edge)")
     for lg in ("cfb", "nfl"):
         if not s[lg]["all"]["n"]:
             continue
