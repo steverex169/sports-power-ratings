@@ -187,8 +187,11 @@ def summary(d, recent=25):
             "p4": _rec([f for f in fin if f["lg"] == "cfb" and f.get("tier") == "P4"]),
             "cfb": _rec([f for f in fin if f["lg"] == "cfb"]),
         },
-        "recent": sorted(graded, key=lambda p: (p["week"], p["lg"]),
-                         reverse=True)[:recent],
+        # Per league: college weeks run ahead of the NFL's, so one shared
+        # top-N was all college and left the NFL card empty.
+        "recent": [p for lg in ("cfb", "nfl")
+                   for p in sorted((p for p in graded if p["lg"] == lg),
+                                   key=lambda p: p["week"], reverse=True)[:recent]],
         "upcoming": sorted(pending, key=lambda p: -p["stars"])[:recent],
     }
     return out

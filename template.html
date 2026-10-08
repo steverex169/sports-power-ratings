@@ -262,11 +262,12 @@ The headline number is <b>model vs. the win-total market</b> — where the softe
 <span class="seg" id="n-wkfilter"></span>
 <span class="legend"><span>Sortable — click a header. ± = combined rating uncertainty. Preseason tilts fade from wk 10 (measured), so later lines lean on FPI.
 "Difference" is how many points the model sits off the book, on the side it likes — 48.1% ATS historically, so read it as a question.
-Rank uses the same scoring as this week's plays. Result grades the model's side against the posted line using today's ratings, so it is hindsight; the record above is the real one.</span></span></div>
+Rank uses the same scoring as this week's plays.</span></span></div>
+<div class="measured" id="n-hind"></div>
 <div class="card" style="padding:6px 12px;max-height:560px;overflow:auto"><table id="n-sched"><thead><tr>
 <th data-sk="week">Wk</th><th class="l" data-sk="date">Date</th><th class="l" data-sk="match">Matchup</th>
 <th class="l" data-sk="fav">Model line</th><th class="l" data-sk="mkt">Market line</th>
-<th class="l" data-sk="edge">Difference</th><th class="l" data-sk="rank">Rank</th><th data-sk="unc">±</th><th class="l" data-sk="res">Result</th></tr></thead><tbody id="n-sb"></tbody></table></div>
+<th class="l" data-sk="edge">Difference</th><th class="l" data-sk="rank">Rank</th><th data-sk="unc">±</th><th class="l" data-sk="res" title="Graded with today's ratings, not the pick that was made">Hindsight</th></tr></thead><tbody id="n-sb"></tbody></table></div>
 
 <div class="sec">Key numbers <span style="font-weight:400;color:var(--ink2);font-size:13px" id="kn-sub">— where NFL games actually land</span></div>
 <div class="measured" id="kn-note"></div>
@@ -875,11 +876,22 @@ function mktInfo(g,s){
  const diff=+(s.margin-g.mkt).toFixed(1);
  return {fav:g.mkt>=0?g.home:g.away, line:+Math.abs(g.mkt).toFixed(1),
   diff, side:diff>=0?g.home:g.away, pts:+Math.abs(diff).toFixed(1)};}
+/* The Hindsight column grades finished games with today's FPI, which has
+   already absorbed those results, so it reads far better than any pick could
+   have done. Shown next to the real ledger record so the two are never mixed. */
+function hindNote(){
+ const c={W:0,L:0,Push:0};
+ GAMES.forEach(g=>{const s=schedLine(g);if(!s)return;const o=slateResult(g,mktInfo(g,s));if(o)c[o.ats]++;});
+ const R=(TRACKER.nfl||{}).all||{};
+ $('#n-hind').innerHTML=`<b>The Hindsight column is not the record.</b> It grades finished games with <i>today's</i> ratings, `
+  +`which already know how those games went: <b>${c.W}\u2013${c.L}</b>${c.Push?` (${c.Push} push)`:''} that way. `
+  +`The picks the model actually made before kickoff are <b>${R.w||0}\u2013${R.l||0}</b>${R.pct!=null?` (${R.pct}%)`:''} \u2014 see Record.`;}
 function renderSched(){
  const rows=GAMES.filter(g=>WK==='all'||g.week==+WK);
  if(!rows.length){$('#n-sb').innerHTML='<tr><td colspan="9" class="l" style="color:var(--muted)">Schedule unavailable this build — will populate on next successful fetch.</td></tr>';return;}
  let data=rows.map((g,i)=>({g,i,s:schedLine(g)})).filter(x=>x.s).map(x=>({...x,m:mktInfo(x.g,x.s)}))
   .map(x=>({...x,r:slateRank(x.g,x.s,x.m),o:slateResult(x.g,x.m)}));
+ hindNote();
  const byM=(A,B,f)=>{const x=A.m?f(A.m):null,y=B.m?f(B.m):null;      // unpriced games sort last
   if(x===null&&y===null)return A.i-B.i; if(x===null)return 1; if(y===null)return -1;
   return skAsc?x-y:y-x;};
