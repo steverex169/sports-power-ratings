@@ -10,6 +10,12 @@ That single rule is what separates this from a spreadsheet that gets retyped
 each Monday: the record cannot flatter itself, because the thing being graded
 was fixed before the result existed.
 
+Late news is the one thing first sighting misses: a quarterback ruled out the
+day before kickoff. So a later pre-kickoff build that moves the model's margin
+by playrules.REVISE_MIN appends a dated revision to the play. The original is
+still what the main record grades; the revisions are graded too and reported as
+a second record, "as revised", so whether late news helps can be measured.
+
     .venv/bin/python ledger.py            # show the standing record
     .venv/bin/python ledger.py --path X   # against a different ledger file
 """
@@ -62,6 +68,45 @@ def record(d, lg, plays, seen_iso):
     return added
 
 
+# What a revision keeps: the number it was made against and what it said.
+REVISION_FIELDS = ("mkt", "model", "edge", "abs_edge", "side", "getting",
+                   "stars", "keys", "span", "inj", "inj_note")
+
+
+def revise(d, lg, plays, seen_iso):
+    """Append a revision to each recorded, ungraded play whose model margin
+    has moved by REVISE_MIN since its latest version. `plays` should include
+    games under the play bar (build_plays(min_edge=0)), so a play late news
+    has erased is revised to a pass rather than silently left standing."""
+    revised = 0
+    for p in plays:
+        rec = d["plays"].get(key(lg, p))
+        if not rec or rec.get("ats") is not None:
+            continue
+        last = (rec.get("revisions") or [rec])[-1]
+        if abs(p["model"] - last["model"]) < playrules.REVISE_MIN:
+            continue
+        rev = {f: p.get(f) for f in REVISION_FIELDS}
+        rev.update(seen=seen_iso, ats=None)
+        rec.setdefault("revisions", []).append(rev)
+        revised += 1
+    return revised
+
+
+def _ats(side, home, mkt, actual):
+    if actual == mkt:
+        return "Push"
+    if side == home:
+        return "W" if actual > mkt else "L"
+    return "W" if actual < mkt else "L"
+
+
+def final(p):
+    """The play as it stood at kickoff: its latest revision, or the original."""
+    revs = p.get("revisions")
+    return dict(p, **revs[-1]) if revs else p
+
+
 def grade(d, year, fetch):
     """Fill in results for plays whose games have finished.
 
@@ -84,14 +129,11 @@ def grade(d, year, fetch):
             if not got:
                 continue
             a_pts, h_pts = got
-            actual, mkt = h_pts - a_pts, p["mkt"]
-            if actual == mkt:
-                ats = "Push"
-            elif p["side"] == p["home"]:
-                ats = "W" if actual > mkt else "L"
-            else:
-                ats = "W" if actual < mkt else "L"
-            p.update(away_pts=a_pts, home_pts=h_pts, ats=ats)
+            actual = h_pts - a_pts
+            p.update(away_pts=a_pts, home_pts=h_pts,
+                     ats=_ats(p["side"], p["home"], p["mkt"], actual))
+            for r in p.get("revisions") or []:
+                r["ats"] = _ats(r["side"], p["home"], r["mkt"], actual)
             graded += 1
     return graded
 
@@ -126,6 +168,9 @@ def summary(d, recent=25):
         }
 
     cfb = [p for p in graded if p["lg"] == "cfb"]
+    # As revised: each game as the model had it at kickoff. A revision that
+    # fell under the play bar is a pass and drops out of this record.
+    fin = [f for f in map(final, graded) if f["abs_edge"] >= playrules.PLAY_MIN]
     out = {
         "break_even": playrules.BREAK_EVEN,
         "graded": len(graded), "pending": len(pending),
@@ -136,6 +181,12 @@ def summary(d, recent=25):
                              or p.get("tier") == "P4"]),
         "p4": _rec([p for p in cfb if p.get("tier") == "P4"]),
         "g5": _rec([p for p in cfb if p.get("tier") == "G5"]),
+        "revised": {
+            "n": sum(1 for p in graded if p.get("revisions")),
+            "nfl": _rec([f for f in fin if f["lg"] == "nfl"]),
+            "p4": _rec([f for f in fin if f["lg"] == "cfb" and f.get("tier") == "P4"]),
+            "cfb": _rec([f for f in fin if f["lg"] == "cfb"]),
+        },
         "recent": sorted(graded, key=lambda p: (p["week"], p["lg"]),
                          reverse=True)[:recent],
         "upcoming": sorted(pending, key=lambda p: -p["stars"])[:recent],
@@ -163,6 +214,10 @@ def main():
     print(_line("Recommended (P4 + NFL)", s["recommended"]))
     print(_line("CFB Power-4", s["p4"]))
     print(_line("CFB G5 (no-bet)", s["g5"]))
+    rv = s["revised"]
+    print(f"\n  As revised for late news ({rv['n']} graded play(s) revised):")
+    print(_line("    NFL", rv["nfl"]))
+    print(_line("    CFB Power-4", rv["p4"]))
     for lg in ("cfb", "nfl"):
         if not s[lg]["all"]["n"]:
             continue

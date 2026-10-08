@@ -30,6 +30,16 @@ REGW = {"C": 0.7, "B": 1.0, "A": 1.4}
 DECAY = {"cfb": {"hold": 2, "fade": 8}, "nfl": {"hold": 9, "fade": 9}}
 BETTABLE_MAX = 17.0
 PLAY_MIN = 1.0
+# How close to kickoff a play is first written down. NFL final injury reports
+# land at least a day before kickoff (Friday for Sunday, Wednesday for
+# Thursday), so recording inside 28 hours means the play is made with the
+# week's game statuses known rather than with Monday's guesses. College has no
+# such report, so its window stays the full week.
+LOCK_HOURS = {"cfb": 7 * 24, "nfl": 28}
+# After a play is written, a later pre-kickoff build that moves the model's own
+# margin by this much (an injury, most often) is kept as a dated revision. The
+# original is never changed; the revision is graded alongside it.
+REVISE_MIN = 1.0
 KEY_NUMS = [3, 7, 10, 14]
 KEY_BONUS = 0.75        # what crossing the most valuable number is worth
 KEY_REF = 3             # ...which is 3. Everything else scales off its mass.
@@ -156,7 +166,7 @@ def _kickoff(g):
         return None
 
 
-def build_plays(lg, games, rows, now=None, horizon_days=None, mass=None):
+def build_plays(lg, games, rows, now=None, horizon_days=None, mass=None, min_edge=PLAY_MIN):
     """Every game that clears the bar and has not kicked off yet.
 
     Filtering on kickoff rather than on week number matters more than it looks:
@@ -167,6 +177,9 @@ def build_plays(lg, games, rows, now=None, horizon_days=None, mass=None):
     `horizon_days` bounds the other side. The ledger only commits to games
     inside the coming week, because a line seen eleven days out is not the
     number anyone could have bet.
+
+    `min_edge=0` keeps games that no longer clear the bar, so a recorded play
+    whose edge an injury has erased can be revised to a pass.
     """
     by = {r["team"]: r for r in rows}
     now = now or datetime.datetime.now(datetime.timezone.utc)
@@ -190,7 +203,7 @@ def build_plays(lg, games, rows, now=None, horizon_days=None, mass=None):
         # injuries.apply() prices this week's absences onto the game itself
         margin = round(rating(h, lg, wk) - rating(a, lg, wk) + hfa + (g.get("inj") or 0), 1)
         edge = round(margin - mkt, 1)
-        if abs(edge) < PLAY_MIN:
+        if abs(edge) < min_edge:
             continue
         side = g["home"] if edge >= 0 else g["away"]
         mkt_fav = g["home"] if mkt >= 0 else g["away"]

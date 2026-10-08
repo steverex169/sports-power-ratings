@@ -600,10 +600,17 @@ function bucketRows(list){
   <div style="text-align:right"><div class="num ${pctCls(b.pct)}">${b.pct}%</div>
   <div style="font-size:11px;color:var(--ink2)">n=${b.n}</div></div></div>`).join('');}
 
+/* What late news did to a play: its last revision, graded on its own number. */
+function revNote(p){
+ const r=(p.revisions||[]).slice(-1)[0];
+ if(!r) return '';
+ const call=r.abs_edge<PLAY_MIN?'pass':`${r.side} ${r.getting>=0?'+':''}${r.getting} ${r.ats||''}`;
+ return ` \u00b7 <b>revised</b> \u2192 ${call}${r.inj_note?` (${r.inj_note})`:''}`;}
+
 function gradedRows(list){
  if(!list.length) return '<div class="pempty">No graded plays yet \u2014 this fills in as each week finishes.</div>';
  return list.map(p=>`<div class="eitem"><div><div class="team">${p.side} ${p.getting>=0?'+':''}${p.getting}<span class="res res-${p.ats}">${p.ats}</span></div>
-  <div class="why">${p.away} @ ${p.home} \u00b7 wk ${p.week} \u00b7 ${p.away_pts}\u2013${p.home_pts}${p.tier?` \u00b7 ${p.tier}`:''}</div></div>
+  <div class="why">${p.away} @ ${p.home} \u00b7 wk ${p.week} \u00b7 ${p.away_pts}\u2013${p.home_pts}${p.tier?` \u00b7 ${p.tier}`:''}${revNote(p)}</div></div>
   <div style="text-align:right"><div class="num">${p.abs_edge}</div>
   <div style="font-size:11px;color:var(--ink2)">pts edge</div></div></div>`).join('');}
 
@@ -613,8 +620,10 @@ function renderTracker(lg,px){
   cards.push(recCard('CFB recommended (P4)',T.p4));
   cards.push(recCard('CFB G5 (no-bet)',T.g5));
   cards.push(recCard('All CFB plays',S.all));
+  cards.push(recCard('P4 as revised for late news',(T.revised||{}).p4));
  }else{
   cards.push(recCard('NFL plays',S.all));
+  cards.push(recCard('NFL as revised for late news',(T.revised||{}).nfl));
   cards.push(recCard('Recommended (P4 + NFL)',T.recommended));
  }
  cards.push(recCard('Every play, both sports',T.overall));
@@ -624,7 +633,10 @@ function renderTracker(lg,px){
  const n=(S.all&&S.all.n)||0, pend=T.pending||0;
  const need=Math.round(Math.pow(1.96/0.0215,2)*0.25);
  $('#'+px+'-tnote').innerHTML=`<b>Recorded before kickoff, graded after.</b> Each play is written to the ledger the first `
-  +`build that sees it and is never recomputed, so a weekly FPI refresh cannot improve the model's own past. `
+  +`build that sees it ${lg==='nfl'?'inside 28 hours of kickoff, after the final injury report,':'in its week'} `
+  +`and is never recomputed, so a weekly FPI refresh cannot improve the model's own past. `
+  +`If later news moves the model a point or more before kickoff, that is added as a dated revision `
+  +`and graded separately as the "revised" record \u2014 ${(T.revised||{}).n||0} graded play(s) revised so far. `
   +`<b>${n}</b> ${lg.toUpperCase()} play${n===1?'':'s'} graded so far, ${pend} pending. `
   +`Break-even at -110 is <b>${BE}%</b>, and the range next to each figure is the 95% interval \u2014 `
   +`separating a real ${BE}% edge from a losing 48% takes on the order of <b>${need.toLocaleString()}</b> graded plays, `

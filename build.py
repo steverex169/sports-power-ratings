@@ -126,15 +126,22 @@ def main():
     print("Updating ledger…")
     led = ledger.load()
     added = 0
+    revised = 0
     for lg, games, rows in (("cfb", cfb_games, cfb_rows), ("nfl", nfl_games, nfl_rows)):
-        # Only games kicking off within the week: a line seen eleven days out
-        # is not a number anyone could have taken.
-        plays = playrules.build_plays(lg, games, rows, horizon_days=7, mass=mass)
+        # Only games inside the lock window: for the NFL that is after the
+        # final injury report, so the play is made with game statuses known.
+        lock = playrules.LOCK_HOURS[lg] / 24
+        plays = playrules.build_plays(lg, games, rows, horizon_days=lock, mass=mass)
         added += ledger.record(led, lg, plays, built_iso)
+        # Late news on plays already written goes down as a revision, never
+        # as an edit — including the play it erases.
+        everything = playrules.build_plays(lg, games, rows, horizon_days=7, mass=mass,
+                                           min_edge=0)
+        revised += ledger.revise(led, lg, everything, built_iso)
     graded = ledger.grade(led, year, ds.get_results)
     ledger.save(led)
     tracker = ledger.summary(led)
-    print(f"  {added} new play(s) recorded, {graded} newly graded | "
+    print(f"  {added} new play(s) recorded, {revised} revised, {graded} newly graded | "
           f"{tracker['graded']} graded, {tracker['pending']} pending")
     if tracker["overall"]["n"]:
         o = tracker["overall"]
