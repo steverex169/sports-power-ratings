@@ -77,6 +77,15 @@ def main():
     lost = injuries.get_nfl_injuries()
     injuries.apply(nfl_games, lost)
     nfl_injuries = injuries.track(lost, nfl_games, "nfl")
+    # Final scores on the season slate, so a finished game shows how it landed.
+    # Only weeks that have kicked off are asked for; the rest have nothing yet.
+    now_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
+    started = sorted({g["week"] for g in nfl_games if g.get("iso") and g["iso"] <= now_iso})
+    finals = ds.get_results("nfl", year, started) if started else {}
+    for g in nfl_games:
+        got = finals.get((g["week"], g["away"], g["home"]))
+        if got:
+            g["a_pts"], g["h_pts"] = got
     lost = injuries.get_cfb_injuries(set(cfb_fpi))
     injuries.apply(cfb_games, lost)
     cfb_injuries = injuries.track(lost, cfb_games, "cfb")

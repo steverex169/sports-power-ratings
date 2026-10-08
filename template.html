@@ -114,7 +114,12 @@ tr:hover td{background:color-mix(in srgb,var(--series1) 7%,transparent)}
    rather than show a table of dashes. Market line and Difference are 6th/7th
    in both slates. */
 table.nomkt th:nth-child(6),table.nomkt td:nth-child(6),
-table.nomkt th:nth-child(7),table.nomkt td:nth-child(7){display:none}
+table.nomkt th:nth-child(7),table.nomkt td:nth-child(7),
+/* the NFL slate folds Site into Matchup, so its market columns sit at 5-7 */
+#n-sched.nomkt th:nth-child(5),#n-sched.nomkt td:nth-child(5){display:none}
+.slatesum{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--ink2);margin:0 0 10px}
+.slatesum b{color:var(--ink);font-variant-numeric:tabular-nums}
+.res{font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums}
 </style></head><body>
 <div id="bar"><b>🏈 Sports Power Ratings — 2026</b>
 <span class="seg"><button id="bcfb" class="on">College Football</button><button id="bnfl">NFL</button></span>
@@ -252,14 +257,16 @@ The headline number is <b>model vs. the win-total market</b> — where the softe
 <span class="legend" style="margin-left:6px"><span>Scales the tilts. Edges, order &amp; schedule update live.</span></span></div>
 
 <div class="sec">2026 season slate <span style="font-weight:400;color:var(--ink2);font-size:13px">— projected line per game, week by week</span></div>
+<div class="slatesum" id="n-slatesum"></div>
 <div class="controls" style="margin-top:0">
 <span class="seg" id="n-wkfilter"></span>
 <span class="legend"><span>Sortable — click a header. ± = combined rating uncertainty. Preseason tilts fade from wk 10 (measured), so later lines lean on FPI.
-"Difference" is how many points the model sits off the book, on the side it likes — 48.1% ATS historically, so read it as a question.</span></span></div>
+"Difference" is how many points the model sits off the book, on the side it likes — 48.1% ATS historically, so read it as a question.
+Rank uses the same scoring as this week's plays. Result grades the model's side against the posted line using today's ratings, so it is hindsight; the record above is the real one.</span></span></div>
 <div class="card" style="padding:6px 12px;max-height:560px;overflow:auto"><table id="n-sched"><thead><tr>
-<th data-sk="week">Wk</th><th class="l" data-sk="date">Date</th><th class="l" data-sk="match">Matchup</th><th class="l" data-sk="site">Site</th>
+<th data-sk="week">Wk</th><th class="l" data-sk="date">Date</th><th class="l" data-sk="match">Matchup</th>
 <th class="l" data-sk="fav">Model line</th><th class="l" data-sk="mkt">Market line</th>
-<th class="l" data-sk="edge">Difference</th><th data-sk="unc">±</th></tr></thead><tbody id="n-sb"></tbody></table></div>
+<th class="l" data-sk="edge">Difference</th><th class="l" data-sk="rank">Rank</th><th data-sk="unc">±</th><th class="l" data-sk="res">Result</th></tr></thead><tbody id="n-sb"></tbody></table></div>
 
 <div class="sec">Key numbers <span style="font-weight:400;color:var(--ink2);font-size:13px" id="kn-sub">— where NFL games actually land</span></div>
 <div class="measured" id="kn-note"></div>
@@ -841,6 +848,8 @@ function render(){const q=$('#n-q').value.toLowerCase();let rows=DATA.filter(d=>
 document.querySelectorAll('#n-tbl th').forEach(th=>th.addEventListener('click',()=>{const k=th.dataset.k;
  if(k===sortK)asc=!asc;else{sortK=k;asc=(k==='team');}render();}));
 $('#n-q').addEventListener('input',render);
+/* The matchup cell carries the full names; the line columns only need the nickname. */
+const nick=t=>t.split(' ').pop();
 let skK='date',skAsc=true,WK='all';
 function schedLine(g){const a=rec(g.away),h=rec(g.home);if(!a||!h)return null;const hfa=g.site?0:h.hfa;
  const margin=myOf(h,g.week)-myOf(a,g.week)+hfa+(g.inj||0);const fav=margin>=0?g.home:g.away;
@@ -856,8 +865,9 @@ function mktInfo(g,s){
   diff, side:diff>=0?g.home:g.away, pts:+Math.abs(diff).toFixed(1)};}
 function renderSched(){
  const rows=GAMES.filter(g=>WK==='all'||g.week==+WK);
- if(!rows.length){$('#n-sb').innerHTML='<tr><td colspan="8" class="l" style="color:var(--muted)">Schedule unavailable this build — will populate on next successful fetch.</td></tr>';return;}
- let data=rows.map((g,i)=>({g,i,s:schedLine(g)})).filter(x=>x.s).map(x=>({...x,m:mktInfo(x.g,x.s)}));
+ if(!rows.length){$('#n-sb').innerHTML='<tr><td colspan="9" class="l" style="color:var(--muted)">Schedule unavailable this build — will populate on next successful fetch.</td></tr>';return;}
+ let data=rows.map((g,i)=>({g,i,s:schedLine(g)})).filter(x=>x.s).map(x=>({...x,m:mktInfo(x.g,x.s)}))
+  .map(x=>({...x,r:slateRank(x.g,x.s,x.m),o:slateResult(x.g,x.m)}));
  const byM=(A,B,f)=>{const x=A.m?f(A.m):null,y=B.m?f(B.m):null;      // unpriced games sort last
   if(x===null&&y===null)return A.i-B.i; if(x===null)return 1; if(y===null)return -1;
   return skAsc?x-y:y-x;};
@@ -865,20 +875,41 @@ function renderSched(){
   if(skK==='mkt')return byM(A,B,m=>m.line);
   if(skK==='edge')return byM(A,B,m=>m.pts);
   if(skK==='unc')return skAsc?A.s.unc-B.s.unc:B.s.unc-A.s.unc;
+  if(skK==='rank'){const x=A.r,y=B.r;if(x==null&&y==null)return A.i-B.i;if(x==null)return 1;if(y==null)return -1;return skAsc?x-y:y-x;}
+  if(skK==='res'){const k=o=>o?{W:0,Push:1,L:2}[o.ats]:3;return skAsc?k(A.o)-k(B.o)||A.i-B.i:k(B.o)-k(A.o)||A.i-B.i;}
   if(skK==='fav')return skAsc?A.s.fav.localeCompare(B.s.fav):B.s.fav.localeCompare(A.s.fav);
   if(skK==='match')return skAsc?A.g.home.localeCompare(B.g.home):B.g.home.localeCompare(A.g.home);
   return skAsc?A.i-B.i:B.i-A.i;});
  const dash='<span style="color:var(--muted)">—</span>';
- $('#n-sb').innerHTML=data.map(({g,s,m})=>{const site=g.site?`<span title="${g.site}">${g.site.split(',')[0]}</span>`:dash;
-  const mkt=m?`<b>${m.fav}</b> −${m.line.toFixed(1)}`:`${dash} <span style="color:var(--muted);font-size:11px">not priced</span>`;
-  const diff=m?`<span class="${m.diff>=0?'pos':'neg'}">${m.side} +${m.pts.toFixed(1)}</span>`:dash;
+ $('#n-sb').innerHTML=data.map(({g,s,m,r,o})=>{const site=g.site?`<br><span style="color:var(--ink2);font-size:11px" title="${g.site}">at ${g.site.split(',')[0]}</span>`:'';
+  const mkt=m?`<b>${nick(m.fav)}</b> −${m.line.toFixed(1)}`:`${dash} <span style="color:var(--muted);font-size:11px">not priced</span>`;
+  const diff=m?`<span class="${m.diff>=0?'pos':'neg'}">${nick(m.side)} +${m.pts.toFixed(1)}</span>`:dash;
   return `<tr><td>${g.week}</td><td class="l" style="color:var(--ink2)">${g.date}</td>
-   <td class="l">${g.away} <span style="color:var(--muted)">@</span> <b>${g.home}</b>${g.inj_note?`<br><span class="keyx" style="margin-left:0;background:color-mix(in srgb,var(--crit) 14%,transparent);color:var(--crit)" title="Already in the model's number">${g.inj_note}</span>`:''}</td>
-   <td class="l" style="color:var(--ink2);font-size:12px">${site}</td>
-   <td class="l"><b>${s.fav}</b> −${s.line.toFixed(1)}</td>
+   <td class="l">${g.away} <span style="color:var(--muted)">@</span> <b>${g.home}</b>${site}${g.inj_note?`<br><span class="keyx" style="margin-left:0;background:color-mix(in srgb,var(--crit) 14%,transparent);color:var(--crit)" title="Already in the model's number">${g.inj_note}</span>`:''}</td>
+   <td class="l"><b>${nick(s.fav)}</b> −${s.line.toFixed(1)}</td>
    <td class="l" style="font-size:12px">${mkt}</td>
    <td class="l" style="font-size:12px">${diff}</td>
-   <td><span class="band">±${s.unc}</span></td></tr>`;}).join('');}
+   <td class="l">${r!=null?starHTML(r):dash}</td>
+   <td><span class="band">±${s.unc}</span></td>
+   <td class="l res">${o?`${g.a_pts}–${g.h_pts} <span class="${o.ats==='W'?'pos':o.ats==='L'?'neg':''}" style="font-weight:700">${o.ats}</span>`:g.h_pts!=null?`${g.a_pts}–${g.h_pts}`:dash}</td></tr>`;}).join('');}
+/* Rank only where the model would actually make a play: a priced, bettable
+   line and an edge past PLAY_MIN. Everything else ranks nothing. */
+function slateRank(g,s,m){
+ if(!m||m.pts<PLAY_MIN||Math.abs(g.mkt)>BETTABLE_MAX) return null;
+ return playRank(m.pts,s.unc,{keys:keysCrossed(g.mkt,s.margin)});}
+/* The model's side against the posted line, graded the way ledger.grade does. */
+function slateResult(g,m){
+ if(!m||g.h_pts==null||m.pts<PLAY_MIN) return null;
+ const actual=g.h_pts-g.a_pts;
+ const ats=actual===g.mkt?'Push':(m.side===g.home)===(actual>g.mkt)?'W':'L';
+ return {ats};}
+(function(){const priced=GAMES.filter(g=>g.mkt!=null).length;
+ const open=new Set(GAMES.map(g=>g.week)),pricedWk=new Set(GAMES.filter(g=>g.mkt!=null).map(g=>g.week));
+ const done=GAMES.filter(g=>g.h_pts!=null).length;
+ $('#n-slatesum').innerHTML=`<span><b>${GAMES.length}</b> games on the slate</span>`+
+  `<span><b>${priced}</b> with a market line</span>`+
+  `<span><b>${[...open].filter(wk=>!pricedWk.has(wk)).length}</b> weeks with no line yet (model line only)</span>`+
+  `<span><b>${done}</b> finished</span>`;})();
 if(!GAMES.some(g=>g.mkt!=null)) $('#n-sched').classList.add('nomkt');
 buildWeekFilter('#n-wkfilter',GAMES,w=>{WK=w;renderSched();});
 document.querySelectorAll('#n-sched th').forEach(th=>th.addEventListener('click',()=>{const k=th.dataset.sk;
