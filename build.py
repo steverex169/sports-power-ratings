@@ -138,6 +138,7 @@ def main():
         everything = playrules.build_plays(lg, games, rows, horizon_days=7, mass=mass,
                                            min_edge=0)
         revised += ledger.revise(led, lg, everything, built_iso)
+        ledger.track_close(led, lg, games, built_iso)
     graded = ledger.grade(led, year, ds.get_results)
     ledger.save(led)
     tracker = ledger.summary(led)
