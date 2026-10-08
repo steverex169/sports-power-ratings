@@ -11,6 +11,7 @@ than assuming it.
     .venv/bin/python backtest.py --years 2023-2025
     .venv/bin/python backtest.py --audit             # lookahead check only
     .venv/bin/python backtest.py --tilts             # do the NFL tilts earn their place?
+    .venv/bin/python backtest.py --fit-reg           # what RegTilt's coefficients should be
 
 What it can and cannot answer, stated up front:
 
@@ -322,6 +323,8 @@ def main():
                     help="only run the lookahead audit")
     ap.add_argument("--tilts", action="store_true",
                     help="NFL only: score the reconstructable tilts against the market")
+    ap.add_argument("--fit-reg", action="store_true",
+                    help="NFL only: fit the RegTilt coefficients, scored out of sample")
     ap.add_argument("--hfa", action="store_true",
                     help="fit the home-field constant from results")
     args = ap.parse_args()
@@ -336,6 +339,10 @@ def main():
     if args.hfa:
         for lg in leagues:
             report_hfa(lg, years, fit_hfa(lg, years))
+        return
+
+    if args.fit_reg:
+        report_fit_reg(fit_reg(years))
         return
 
     if args.tilts:
@@ -408,8 +415,8 @@ def espn_to_nflverse(years):
     return out
 
 
-def nfl_reg_tilt(year):
-    """RegTilt for `year`, rebuilt from `year - 1` results: {nv_abbrev: tilt}."""
+def nfl_reg_inputs(year):
+    """{nv_abbrev: (turnover_margin, luck_wins)} for `year`, from `year - 1`."""
     prior = year - 1
     rows = list(csv.DictReader(io.StringIO(
         _csv_cached(_NV_TEAMSTATS.format(yr=prior), f"bt_teamstats_{prior}.csv"))))
@@ -430,13 +437,20 @@ def nfl_reg_tilt(year):
             played[team] = played.get(team, 0) + 1
             wins[team] = wins.get(team, 0) + (1 if sf > sa else 0.5 if sf == sa else 0)
 
-    tilts = {}
+    out = {}
     for team in pf:
         pyth = played[team] * pf[team] ** PYTH_EXP / (pf[team] ** PYTH_EXP + pa[team] ** PYTH_EXP)
-        luck = wins[team] - pyth
-        raw = -(BETA_TO * to_margin.get(team, 0) + BETA_LUCK * luck)
-        tilts[team] = max(-CAP_REG, min(CAP_REG, raw))
-    return tilts
+        out[team] = (to_margin.get(team, 0), wins[team] - pyth)
+    return out
+
+
+def reg_tilt(to, luck, b_to=BETA_TO, b_luck=BETA_LUCK):
+    return max(-CAP_REG, min(CAP_REG, -(b_to * to + b_luck * luck)))
+
+
+def nfl_reg_tilt(year):
+    """RegTilt for `year`, rebuilt from `year - 1` results: {nv_abbrev: tilt}."""
+    return {t: reg_tilt(to, luck) for t, (to, luck) in nfl_reg_inputs(year).items()}
 
 
 def nfl_qb_adj(year):
@@ -580,6 +594,109 @@ def report_nfl_model(years, variants, market, picks):
             cells.append(f"{sum(sel)}-{len(sel)-sum(sel)} {sum(sel)/len(sel)*100:.1f}%"
                          if len(sel) >= 30 else "-")
         print(f"    {name:<22}{cells[0]:>14}{cells[1]:>14}{cells[2]:>14}")
+
+
+# ---------------- RegTilt coefficient fit ----------------
+#
+# 0.06 and 0.40 were set by hand. This asks what the data would have chosen,
+# and — the part that matters — whether the choice holds up on seasons it was
+# not fitted on. Each season is scored with coefficients fitted only on the
+# seasons before it (walk-forward), so the out-of-sample line is what fitting
+# would actually have bought. The tilt is applied exactly as the live model
+# does: per-team cap, then the in-season decay from playrules.
+
+B_TO_GRID = [i * 0.01 for i in range(0, 16)]      # 0 to 0.15 per turnover
+B_LUCK_GRID = [i * 0.05 for i in range(0, 21)]    # 0 to 1.0 per luck win
+
+
+def reg_fit_rows(years):
+    """Every priced game with what the tilt needs: one row per game."""
+    import playrules
+    cfg = LEAGUES["nfl"]
+    lines = nfl_closing_lines()
+    id2nv = espn_to_nflverse(years)
+    rows = []
+    for yr in years:
+        inp = nfl_reg_inputs(yr)
+        for wk in cfg["weeks"]:
+            games = results_week("nfl", yr, wk)
+            if not games:
+                continue
+            first = min((_dt(g["kickoff"]) for g in games if g.get("kickoff")), default=None)
+            fpi, _ = fpi_asof("nfl", yr, wk, before=first)
+            for g in games:
+                hid, aid = g["home"]["id"], g["away"]["id"]
+                hnv, anv = id2nv.get(hid), id2nv.get(aid)
+                key = (yr, wk, hnv, anv)
+                if hid not in fpi or aid not in fpi or key not in lines:
+                    continue
+                rows.append({"yr": yr, "base": fpi[hid] - fpi[aid] + (0.0 if g["neutral"] else cfg["hfa"]),
+                             "h": inp.get(hnv, (0, 0.0)), "a": inp.get(anv, (0, 0.0)),
+                             "decay": playrules.decay("nfl", wk),
+                             "spread": lines[key], "actual": g["margin"]})
+    return rows
+
+
+def _score(rows, b_to, b_luck):
+    """MAE against the result, and ATS on plays clearing the 1-point bar."""
+    err, w, n = 0.0, 0, 0
+    for r in rows:
+        pred = r["base"] + r["decay"] * (reg_tilt(*r["h"], b_to, b_luck)
+                                         - reg_tilt(*r["a"], b_to, b_luck))
+        err += abs(pred - r["actual"])
+        if abs(pred - r["spread"]) >= 1 and r["actual"] != r["spread"]:
+            n += 1
+            w += (pred > r["spread"]) == (r["actual"] > r["spread"])
+    return {"mae": err / len(rows) if rows else None, "w": w, "n": n}
+
+
+def _best(rows):
+    return min(((bt, bl) for bt in B_TO_GRID for bl in B_LUCK_GRID),
+               key=lambda c: _score(rows, *c)["mae"])
+
+
+def fit_reg(years):
+    rows = reg_fit_rows(years)
+    out = {"years": years, "n": len(rows), "full": _best(rows), "seasons": []}
+    for i, yr in enumerate(years):
+        test = [r for r in rows if r["yr"] == yr]
+        train = [r for r in rows if r["yr"] < yr]
+        if not test or len({r["yr"] for r in train}) < 2:
+            continue
+        fit = _best(train)
+        out["seasons"].append({"yr": yr, "fit": fit,
+                               "fpi": _score(test, 0, 0),
+                               "current": _score(test, BETA_TO, BETA_LUCK),
+                               "fitted": _score(test, *fit)})
+    return out
+
+
+def report_fit_reg(f):
+    yrs = f["years"]
+    print(f"\n{'='*70}\nNFL RegTilt COEFFICIENT FIT  {yrs[0]}-{yrs[-1]}  ({f['n']} priced games)\n{'='*70}")
+    print(f"  current, set by hand        turnovers {BETA_TO:.2f}  luck {BETA_LUCK:.2f}")
+    print(f"  best fit, all seasons       turnovers {f['full'][0]:.2f}  luck {f['full'][1]:.2f}"
+          "   (in-sample — flatters itself)")
+    print("\n  Out of sample: each season scored with coefficients fitted only on")
+    print("  the seasons before it. MAE is points per game against the result;")
+    print("  ATS is plays 1+ point off the closing line (break-even 52.4%).\n")
+    print(f"    {'season':<8}{'fit (to, luck)':<16}{'FPI alone':>18}{'current tilt':>18}{'fitted tilt':>18}")
+    tot = {k: [0.0, 0, 0, 0] for k in ("fpi", "current", "fitted")}
+    for s in f["seasons"]:
+        cells = []
+        for k in ("fpi", "current", "fitted"):
+            x = s[k]
+            cells.append(f"{x['mae']:.2f}  {x['w']}-{x['n']-x['w']}")
+            tot[k][0] += x["mae"]; tot[k][1] += x["w"]; tot[k][2] += x["n"]; tot[k][3] += 1
+        print(f"    {s['yr']:<8}{f'{s["fit"][0]:.2f}, {s["fit"][1]:.2f}':<16}"
+              + "".join(f"{c:>18}" for c in cells))
+    if f["seasons"]:
+        cells = []
+        for k in ("fpi", "current", "fitted"):
+            mae, w, n, k_ = tot[k]
+            cells.append(f"{mae / k_:.3f}  {100 * w / n:.1f}%" if n else "-")
+        print(f"    {'all':<8}{'':<16}" + "".join(f"{c:>18}" for c in cells))
+
 
 if __name__ == "__main__":
     main()
