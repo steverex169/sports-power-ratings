@@ -239,6 +239,7 @@ The headline number is <b>model vs. the win-total market</b> — where the softe
 <div class="card" style="padding:6px 12px;max-height:600px;overflow:auto"><table id="n-tbl"><thead><tr>
 <th data-k="rank">#</th><th class="l" data-k="team">Team</th><th data-k="fpi">FPI</th><th data-k="my">My Rating</th>
 <th class="l" data-k="edge">Edge vs Mkt</th><th data-k="win">Win Tot</th><th data-k="reg">Reg</th><th data-k="qb">QB</th><th data-k="ros">Roster</th>
+<th data-k="wl" title="Actual won-lost record">Record</th><th data-k="dwl" title="Won-lost if every game had gone to the team whose plays were worth more (net passing + rushing EPA)">Deserved</th><th data-k="luck" title="Points per game the scoreboard gave beyond what the plays earned. For reading only: it is not in My Rating, because FPI already discounts it (backtested 2019-2025)">Luck/g</th>
 </tr></thead><tbody id="n-tb"></tbody></table></div>
 
 
@@ -619,10 +620,27 @@ function revNote(p){
  const call=r.abs_edge<PLAY_MIN?'pass':`${r.side} ${r.getting>=0?'+':''}${r.getting} ${r.ats||''}`;
  return ` \u00b7 <b>revised</b> \u2192 ${call}${r.inj_note?` (${r.inj_note})`:''}`;}
 
+/* What the box score says the game deserved, and how the play grades on that.
+   A W here on an L above is a play that was right and lost anyway. */
+function dsvTxt(dsv,home,away){
+ if(dsv==null) return '';
+ const nk=t=>t.split(' ').pop();
+ return Math.abs(dsv)<0.5?'deserved a tie':`deserved ${nk(dsv>0?home:away)} by ${Math.abs(dsv).toFixed(1)}`;}
+function dsvNote(p){
+ if(!p.ats_dsv) return '';
+ return ` \u00b7 ${dsvTxt(p.dsv,p.home,p.away)} <span class="res res-${p.ats_dsv}" style="margin-left:2px">${p.ats_dsv}</span>`;}
+
+/* The record card for the deserved grade: same plays, box-score margin. */
+function dsvCard(r){
+ if(!r||!r.n) return `<div class="reccard"><div class="lab">Graded on deserved score</div>
+  <div class="val" style="color:var(--muted)">—</div>
+  <div class="pct" style="color:var(--muted);font-weight:400">box scores not in yet</div></div>`;
+ return recCard('Graded on deserved score',r);}
+
 function gradedRows(list){
  if(!list.length) return '<div class="pempty">No graded plays yet \u2014 this fills in as each week finishes.</div>';
  return list.map(p=>`<div class="eitem"><div><div class="team">${p.side} ${p.getting>=0?'+':''}${p.getting}<span class="res res-${p.ats}">${p.ats}</span></div>
-  <div class="why">${p.away} @ ${p.home} \u00b7 wk ${p.week} \u00b7 ${p.away_pts}\u2013${p.home_pts}${p.tier?` \u00b7 ${p.tier}`:''}${revNote(p)}</div></div>
+  <div class="why">${p.away} @ ${p.home} \u00b7 wk ${p.week} \u00b7 ${p.away_pts}\u2013${p.home_pts}${p.tier?` \u00b7 ${p.tier}`:''}${dsvNote(p)}${revNote(p)}</div></div>
   <div style="text-align:right"><div class="num">${p.abs_edge}</div>
   <div style="font-size:11px;color:var(--ink2)">pts edge</div></div></div>`).join('');}
 
@@ -637,6 +655,7 @@ function renderTracker(lg,px){
   cards.push(recCard('NFL plays',S.all));
   cards.push(recCard('NFL as revised for late news',(T.revised||{}).nfl));
   cards.push(recCard('Recommended (P4 + NFL)',T.recommended));
+  cards.push(dsvCard(S.deserved));
  }
  cards.push(recCard('Every play, both sports',T.overall));
  cards.push(clvCard(S.clv));
@@ -654,7 +673,10 @@ function renderTracker(lg,px){
   +`Break-even at -110 is <b>${BE}%</b>, and the range next to each figure is the 95% interval \u2014 `
   +`separating a real ${BE}% edge from a losing 48% takes on the order of <b>${need.toLocaleString()}</b> graded plays, `
   +`so treat everything here as early. <b>Beat the closing line</b> is the faster test: how often the market moved `
-  +`toward the side taken between the pick and kickoff. Above 50% is an edge showing up long before the record can.`;}
+  +`toward the side taken between the pick and kickoff. Above 50% is an edge showing up long before the record can.`
+  +(lg==='nfl'?` <b>Graded on deserved score</b> grades the same plays against the margin the box score says each game earned `
+  +`(net passing and rushing EPA) instead of the final score, so a pick-six or a missed kick doesn't decide it. `
+  +`It is not the record and is never added to it \u2014 it shows whether the model was on the better team that day.`:'');}
 
 /* Both cards read the same ledger; the elements are static, so this runs now. */
 renderTracker('cfb','c');renderTracker('nfl','n');
@@ -856,9 +878,20 @@ function panels(){const buy=[...DATA].sort((a,b)=>edgeOf(b)-edgeOf(a)).slice(0,8
   <div style="text-align:right"><div class="num ${e>0?'pos':'neg'}">${e>0?'+':''}${e.toFixed(1)}</div>
   <div style="font-size:11px;color:var(--ink2)">O/U ${d.win} · ${myOf(d).toFixed(1)} vs mkt ${d.mkt.toFixed(1)} <span class="band">±${d.band}</span></div></div></div>`;};
  $('#n-buy').innerHTML=buy.map(it).join('');$('#n-fade').innerHTML=fade.map(it).join('');}
+/* Who really won: each team's actual record, the record its box scores
+   deserved, and the points a game the scoreboard gave it beyond that. Reading
+   only — none of it moves My Rating. */
+const BOX={};
+GAMES.forEach(g=>{if(g.h_pts==null||g.dsv==null)return;
+ const m=g.h_pts-g.a_pts;
+ [[g.home,m,g.dsv],[g.away,-m,-g.dsv]].forEach(([t,a,dv])=>{
+  const b=BOX[t]||(BOX[t]={w:0,l:0,t:0,dw:0,dl:0,luck:0,n:0});
+  a>0?b.w++:a<0?b.l++:b.t++; dv>0?b.dw++:b.dl++; b.luck+=a-dv; b.n++;});});
+const boxOf=(d,k)=>{const b=BOX[d.team];if(!b)return null;
+ return k==='wl'?b.w-b.l:k==='dwl'?b.dw-b.dl:b.luck/b.n;};
 let sortK='rank',asc=true;
 function render(){const q=$('#n-q').value.toLowerCase();let rows=DATA.filter(d=>d.team.toLowerCase().includes(q));
- const val=(d,k)=>k==='my'?myOf(d):k==='edge'?edgeOf(d):k==='rank'?myOf(d):d[k];
+ const val=(d,k)=>k==='my'?myOf(d):k==='edge'?edgeOf(d):k==='rank'?myOf(d):['wl','dwl','luck'].includes(k)?(boxOf(d,k)??-99):d[k];
  rows.sort((a,b)=>{let x=val(a,sortK),y=val(b,sortK);if(sortK==='rank')return asc?y-x:x-y;
   if(typeof x==='string')return asc?x.localeCompare(y):y.localeCompare(x);return asc?x-y:y-x;});
  $('#n-tb').innerHTML=rows.map((d,i)=>{const e=edgeOf(d),my=myOf(d);
@@ -870,7 +903,13 @@ function render(){const q=$('#n-q').value.toLowerCase();let rows=DATA.filter(d=>
   return `<tr><td>${rank}</td><td class="l team">${d.team}${rtag}</td><td>${d.fpi.toFixed(1)}</td>
    <td style="font-weight:700">${my.toFixed(1)} <span class="band">±${d.band}</span></td><td class="l">${bar}</td>
    <td>${d.win}</td><td>${d.reg>0?'+':''}${d.reg.toFixed(1)}</td>
-   <td>${d.qb?(d.qb>0?'+':'')+d.qb.toFixed(1):'—'}</td><td>${d.ros?(d.ros>0?'+':'')+d.ros.toFixed(1):'—'}</td></tr>`;}).join('');}
+   <td>${d.qb?(d.qb>0?'+':'')+d.qb.toFixed(1):'—'}</td><td>${d.ros?(d.ros>0?'+':'')+d.ros.toFixed(1):'—'}</td>${boxCells(d)}</tr>`;}).join('');}
+function boxCells(d){const b=BOX[d.team];
+ if(!b) return '<td>—</td><td>—</td><td>—</td>';
+ const lk=b.luck/b.n, gap=(b.w-b.l)-(b.dw-b.dl);
+ return `<td>${b.w}-${b.l}${b.t?'-'+b.t:''}</td>
+  <td class="${gap>=2?'neg':gap<=-2?'pos':''}" style="font-weight:${Math.abs(gap)>=2?700:400}">${b.dw}-${b.dl}</td>
+  <td class="${lk>=3?'neg':lk<=-3?'pos':''}">${lk>0?'+':''}${lk.toFixed(1)}</td>`;}
 document.querySelectorAll('#n-tbl th').forEach(th=>th.addEventListener('click',()=>{const k=th.dataset.k;
  if(k===sortK)asc=!asc;else{sortK=k;asc=(k==='team');}render();}));
 $('#n-q').addEventListener('input',render);
@@ -928,7 +967,7 @@ function renderSched(){
    <td class="l" style="font-size:12px">${diff}</td>
    <td class="l">${r!=null?starHTML(r):dash}</td>
    <td><span class="band">±${s.unc}</span></td>
-   <td class="l res">${o?`${g.a_pts}–${g.h_pts} <span class="${o.ats==='W'?'pos':o.ats==='L'?'neg':''}" style="font-weight:700">${o.ats}</span>`:g.h_pts!=null?`${g.a_pts}–${g.h_pts}`:dash}</td></tr>`;}).join('');}
+   <td class="l res">${o?`${g.a_pts}–${g.h_pts} <span class="${o.ats==='W'?'pos':o.ats==='L'?'neg':''}" style="font-weight:700">${o.ats}</span>`:g.h_pts!=null?`${g.a_pts}–${g.h_pts}`:dash}${g.dsv!=null?`<br><span style="color:var(--ink2);font-size:11px" title="Net passing + rushing EPA: what the plays were worth">${dsvTxt(g.dsv,g.home,g.away)}</span>`:''}</td></tr>`;}).join('');}
 /* Rank only where the model would actually make a play: a priced, bettable
    line and an edge past PLAY_MIN. Everything else ranks nothing. */
 function slateRank(g,s,m){

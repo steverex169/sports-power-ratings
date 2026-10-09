@@ -178,6 +178,27 @@ def grade(d, year, fetch):
     return graded
 
 
+def grade_deserved(d, lg, games):
+    """Grade each graded play a second time, on the margin the box score says
+    the game deserved (`dsv`, from data_sources.attach_box) rather than the
+    final score. A play that lost on a pick-six but was right about the game
+    reads W here. This is not the record and never replaces `ats`: it is a
+    lower-noise read on whether the model's side was the better team that
+    day, the same way the closing line is a lower-noise read on the price."""
+    by = {(g["week"], g["away"], g["home"]): g for g in games}
+    n = 0
+    for p in d["plays"].values():
+        if p["lg"] != lg or p.get("ats") is None or p.get("dsv") is not None:
+            continue
+        g = by.get((p["week"], p["away"], p["home"]))
+        if not g or g.get("dsv") is None:
+            continue
+        p["dsv"] = g["dsv"]
+        p["ats_dsv"] = _ats(p["side"], p["home"], p["mkt"], g["dsv"])
+        n += 1
+    return n
+
+
 # ---------------- reporting ----------------
 
 def _rec(sel):
@@ -212,6 +233,8 @@ def summary(d, recent=25):
         return {
             "all": _rec(sel),
             "clv": _clv(sel),
+            # The same plays, graded on the box score's margin instead.
+            "deserved": _rec([dict(p, ats=p["ats_dsv"]) for p in sel if p.get("ats_dsv")]),
             "by_bucket": [dict(_rec([p for p in sel
                                      if lo <= p["abs_edge"] < hi]), bucket=lab)
                           for lab, lo, hi in playrules.BUCKETS],
@@ -275,6 +298,9 @@ def main():
     print(f"\n  As revised for late news ({rv['n']} graded play(s) revised):")
     print(_line("    NFL", rv["nfl"]))
     print(_line("    CFB Power-4", rv["p4"]))
+    dv = s["nfl"]["deserved"]
+    if dv["n"]:
+        print(_line("NFL on deserved score", dv))
     c = s["clv"]
     if c["n"]:
         print(f"\n  Beat the closing line      {c['beat']} of {c['beat'] + c['worse']}"

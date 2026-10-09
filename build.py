@@ -86,6 +86,9 @@ def main():
         got = finals.get((g["week"], g["away"], g["home"]))
         if got:
             g["a_pts"], g["h_pts"] = got
+    # What each finished game's plays deserved, beside what the scoreboard said.
+    if finals:
+        ds.attach_box(nfl_games, ds.get_nfl_box(year))
     lost = injuries.get_cfb_injuries(set(cfb_fpi))
     injuries.apply(cfb_games, lost)
     cfb_injuries = injuries.track(lost, cfb_games, "cfb")
@@ -140,6 +143,7 @@ def main():
         revised += ledger.revise(led, lg, everything, built_iso)
         ledger.track_close(led, lg, games, built_iso)
     graded = ledger.grade(led, year, ds.get_results)
+    ledger.grade_deserved(led, "nfl", nfl_games)
     ledger.save(led)
     tracker = ledger.summary(led)
     print(f"  {added} new play(s) recorded, {revised} revised, {graded} newly graded | "

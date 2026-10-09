@@ -422,7 +422,9 @@ def get_nfl_schedule(year, weeks=None):
             spread = market.get((wk, NV_ABBR.get(home_ab, home_ab),
                                  NV_ABBR.get(away_ab, away_ab)))
             games.append({"week": wk, "date": date_str, "away": away, "home": home,
-                          "site": site, "iso": ev["date"], "mkt": spread})
+                          "site": site, "iso": ev["date"], "mkt": spread,
+                          "h_ab": NV_ABBR.get(home_ab, home_ab),
+                          "a_ab": NV_ABBR.get(away_ab, away_ab)})
 
     WEEK_ENDS["nfl"] = _week_ends(kickoffs)
     CURRENT_WEEK["nfl"] = _current_week(WEEK_ENDS["nfl"])
@@ -660,6 +662,54 @@ def get_nfl_market_lines(year):
             f"{len(lines)} of {scheduled} games priced"
             + ("" if mode == "live" else f", {mode}"))
     return lines
+
+
+# ---------------- NFL box scores: who really won (nflverse) ----------------
+#
+# A final score is the plays plus noise: a pick-six, a missed kick, a fumble
+# that bounced the right way. Net scrimmage EPA (own passing + rushing EPA
+# minus the opponent's) is what the plays were worth, in points, and explains
+# final margins at r=0.92. The gap is luck. backtest.py --box showed neither
+# FPI nor the closing line is fooled by it, so this is for reading and for
+# grading, never an input to a rating.
+
+_NV_TEAMWEEK = ("https://github.com/nflverse/nflverse-data/releases/download/"
+                "stats_team/stats_team_week_{yr}.csv")
+
+
+def get_nfl_box(year):
+    """{(week, nflverse_abbr): scrimmage EPA} for finished regular-season games.
+    nflverse posts a week's rows the morning after, so the newest games may be
+    missing for a few hours; they simply show no deserved score yet."""
+    try:
+        text, mode = http_get_text(_NV_TEAMWEEK.format(yr=year), f"nflverse_teamweek_{year}.csv")
+    except Exception as e:  # noqa: BLE001
+        _report("NFL box scores (nflverse)", "fallback", f"unavailable — {e}")
+        return {}
+    epa = {}
+    for r in csv.DictReader(io.StringIO(text)):
+        if r.get("season_type") != "REG":
+            continue
+        try:
+            epa[(int(r["week"]), r["team"])] = (float(r.get("passing_epa") or 0)
+                                                + float(r.get("rushing_epa") or 0))
+        except ValueError:
+            continue
+    _report("NFL box scores (nflverse)", "live" if mode == "live" else "cache",
+            f"{len(epa) // 2} games" + ("" if mode == "live" else f", {mode}"))
+    return epa
+
+
+def attach_box(games, epa):
+    """Give each finished game `dsv`: the home margin its plays deserved."""
+    n = 0
+    for g in games:
+        h, a = epa.get((g["week"], g.get("h_ab"))), epa.get((g["week"], g.get("a_ab")))
+        if g.get("h_pts") is None or h is None or a is None:
+            continue
+        g["dsv"] = round(h - a, 1)
+        n += 1
+    return n
 
 
 # ---------------- CFBD (optional, key required) ----------------
