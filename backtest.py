@@ -12,6 +12,7 @@ than assuming it.
     .venv/bin/python backtest.py --audit             # lookahead check only
     .venv/bin/python backtest.py --tilts             # do the NFL tilts earn their place?
     .venv/bin/python backtest.py --fit-reg           # what RegTilt's coefficients should be
+    .venv/bin/python backtest.py --box               # does box-score luck beat the market?
 
 What it can and cannot answer, stated up front:
 
@@ -325,6 +326,8 @@ def main():
                     help="NFL only: score the reconstructable tilts against the market")
     ap.add_argument("--fit-reg", action="store_true",
                     help="NFL only: fit the RegTilt coefficients, scored out of sample")
+    ap.add_argument("--box", action="store_true",
+                    help="NFL only: does fading box-score luck beat FPI and the market?")
     ap.add_argument("--hfa", action="store_true",
                     help="fit the home-field constant from results")
     args = ap.parse_args()
@@ -339,6 +342,10 @@ def main():
     if args.hfa:
         for lg in leagues:
             report_hfa(lg, years, fit_hfa(lg, years))
+        return
+
+    if args.box:
+        report_fit_box(fit_box(years))
         return
 
     if args.fit_reg:
@@ -696,6 +703,138 @@ def report_fit_reg(f):
             mae, w, n, k_ = tot[k]
             cells.append(f"{mae / k_:.3f}  {100 * w / n:.1f}%" if n else "-")
         print(f"    {'all':<8}{'':<16}" + "".join(f"{c:>18}" for c in cells))
+
+
+# ---------------- box-score luck ("who really won") ----------------
+#
+# A final score is the box score plus noise: a pick-six, a missed kick, a
+# fumble that bounced the right way. Net EPA from scrimmage (own passing and
+# rushing EPA minus the opponent's) is what the plays were worth; the gap
+# between that and the final margin is luck. Net EPA explains 2025 margins at
+# r=0.92, so the remaining ~5 points a game is what this measures.
+#
+# The question for the model is whether the luck is still in the ratings: if
+# FPI or the market chase a team's lucky scores, fading each team's luck so
+# far this season should beat them. Scored walk-forward like --fit-reg.
+
+_NV_TEAMWEEK = ("https://github.com/nflverse/nflverse-data/releases/download/"
+                "stats_team/stats_team_week_{yr}.csv")
+BOX_W_GRID = [i * 0.05 for i in range(0, 21)]
+
+
+def box_luck(year, cached=True):
+    """{(nv_team, week): final margin minus net scrimmage EPA}, regular season."""
+    name = f"bt_teamweek_{year}.csv"
+    text = (_csv_cached(_NV_TEAMWEEK.format(yr=year), name) if cached
+            else ds.http_get_text(_NV_TEAMWEEK.format(yr=year), name)[0])
+    epa, opp = {}, {}
+    for r in csv.DictReader(io.StringIO(text)):
+        if r.get("season_type") != "REG":
+            continue
+        k = (r["team"], int(r["week"]))
+        epa[k] = float(r.get("passing_epa") or 0) + float(r.get("rushing_epa") or 0)
+        opp[k] = r["opponent_team"]
+    margin = {}
+    for r in csv.DictReader(io.StringIO(_csv_cached(_NFLVERSE, "bt_nflverse_games.csv"))):
+        if r["season"] != str(year) or r.get("game_type") != "REG" or not r.get("result"):
+            continue
+        wk, m = int(r["week"]), float(r["result"])
+        margin[(r["home_team"], wk)], margin[(r["away_team"], wk)] = m, -m
+    return {k: margin[k] - (e - epa[(opp[k], k[1])])
+            for k, e in epa.items() if k in margin and (opp[k], k[1]) in epa}
+
+
+def _prior_luck(luck, team, wk):
+    xs = [v for (t, w), v in luck.items() if t == team and w < wk]
+    return sum(xs) / len(xs) if xs else 0.0
+
+
+def box_fit_rows(years):
+    import playrules
+    cfg = LEAGUES["nfl"]
+    lines = nfl_closing_lines()
+    id2nv = espn_to_nflverse(years)
+    rows = []
+    for yr in years:
+        inp, luck = nfl_reg_inputs(yr), box_luck(yr)
+        for wk in cfg["weeks"]:
+            games = results_week("nfl", yr, wk)
+            if not games:
+                continue
+            first = min((_dt(g["kickoff"]) for g in games if g.get("kickoff")), default=None)
+            fpi, _ = fpi_asof("nfl", yr, wk, before=first)
+            for g in games:
+                hid, aid = g["home"]["id"], g["away"]["id"]
+                hnv, anv = id2nv.get(hid), id2nv.get(aid)
+                key = (yr, wk, hnv, anv)
+                if hid not in fpi or aid not in fpi or key not in lines:
+                    continue
+                h, a = inp.get(hnv, (0, 0.0)), inp.get(anv, (0, 0.0))
+                rows.append({"yr": yr, "wk": wk,
+                             "base": fpi[hid] - fpi[aid] + (0.0 if g["neutral"] else cfg["hfa"]),
+                             "reg": playrules.decay("nfl", wk) * (reg_tilt(*h) - reg_tilt(*a)),
+                             "luck": _prior_luck(luck, hnv, wk) - _prior_luck(luck, anv, wk),
+                             "spread": lines[key], "actual": g["margin"]})
+    return rows
+
+
+def _score_box(rows, w, reg=True):
+    err, won, n = 0.0, 0, 0
+    for r in rows:
+        pred = r["base"] + (r["reg"] if reg else 0.0) - w * r["luck"]
+        err += abs(pred - r["actual"])
+        if abs(pred - r["spread"]) >= 1 and r["actual"] != r["spread"]:
+            n += 1
+            won += (pred > r["spread"]) == (r["actual"] > r["spread"])
+    return {"mae": err / len(rows) if rows else None, "w": won, "n": n}
+
+
+def fit_box(years):
+    rows = box_fit_rows(years)
+    full = min(BOX_W_GRID, key=lambda w: _score_box(rows, w)["mae"])
+    seasons = []
+    for yr in years:
+        test = [r for r in rows if r["yr"] == yr]
+        train = [r for r in rows if r["yr"] < yr]
+        if not test or len({r["yr"] for r in train}) < 2:
+            continue
+        w = min(BOX_W_GRID, key=lambda w: _score_box(train, w)["mae"])
+        seasons.append({"yr": yr, "w": w,
+                        "fpi": _score_box(test, 0, reg=False),
+                        "current": _score_box(test, 0),
+                        "box": _score_box(test, w)})
+    # The market's own view: does the closing line still carry the luck?
+    mkt = [(r["spread"] - r["actual"], r["luck"]) for r in rows if r["wk"] > 1]
+    return {"years": years, "n": len(rows), "full": full, "seasons": seasons, "mkt": mkt}
+
+
+def report_fit_box(f):
+    yrs = f["years"]
+    print(f"\n{'='*72}\nNFL BOX-SCORE LUCK  {yrs[0]}-{yrs[-1]}  ({f['n']} priced games)\n{'='*72}")
+    print(f"  best weight, all seasons    {f['full']:.2f} of each point of luck faded"
+          "   (in-sample)")
+    print("\n  Out of sample (weight fitted only on earlier seasons). MAE against the")
+    print("  result; ATS on plays 1+ point off the closing line (break-even 52.4%).\n")
+    print(f"    {'season':<8}{'weight':<9}{'FPI alone':>18}{'FPI + RegTilt':>18}{'+ box luck':>18}")
+    tot = {k: [0.0, 0, 0, 0] for k in ("fpi", "current", "box")}
+    for s in f["seasons"]:
+        cells = []
+        for k in ("fpi", "current", "box"):
+            x = s[k]
+            cells.append(f"{x['mae']:.2f}  {x['w']}-{x['n']-x['w']}")
+            tot[k][0] += x["mae"]; tot[k][1] += x["w"]; tot[k][2] += x["n"]; tot[k][3] += 1
+        print(f"    {s['yr']:<8}{s['w']:<9.2f}" + "".join(f"{c:>18}" for c in cells))
+    if f["seasons"]:
+        cells = [f"{t[0] / t[3]:.3f}  {100 * t[1] / t[2]:.1f}%" if t[2] else "-"
+                 for t in tot.values()]
+        print(f"    {'all':<8}{'':<9}" + "".join(f"{c:>18}" for c in cells))
+    xs = [l for _, l in f["mkt"]]
+    ys = [e for e, _ in f["mkt"]]
+    if len(xs) > 30:
+        mx, my = statistics.mean(xs), statistics.mean(ys)
+        b = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sum((x - mx) ** 2 for x in xs)
+        print(f"\n  Closing line's miss per point of luck so far: {b:+.3f}"
+              "   (0 = the market already fades it; + = it still chases luck)")
 
 
 if __name__ == "__main__":
