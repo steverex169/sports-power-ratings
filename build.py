@@ -22,6 +22,7 @@ import injuries
 import keynumbers
 import ledger
 import models
+import pbprating
 import playrules
 
 
@@ -119,6 +120,13 @@ def main():
     built_iso = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     cfb_rows = models.cfb_rows_for_dashboard(cfb_df)
     nfl_rows = models.nfl_rows_for_dashboard(nfl_df)
+    # Our own play-by-play rating, beside FPI. Reading aid only (backtest.py --pbp).
+    pbp, _ = pbprating.current(year)
+    ab2team = {g[k + "_ab"]: g[side] for g in nfl_games
+               for k, side in (("h", "home"), ("a", "away"))}
+    for r in nfl_rows:
+        v = pbp.get(next((ab for ab, t in ab2team.items() if t == r["team"]), None))
+        r["pbp"] = v["pbp"] if v else None
 
     # The record. Plays are written down at first sighting and never recomputed,
     # so a later build can grade them but cannot quietly improve them.

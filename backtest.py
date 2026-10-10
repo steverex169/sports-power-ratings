@@ -13,6 +13,7 @@ than assuming it.
     .venv/bin/python backtest.py --tilts             # do the NFL tilts earn their place?
     .venv/bin/python backtest.py --fit-reg           # what RegTilt's coefficients should be
     .venv/bin/python backtest.py --box               # does box-score luck beat the market?
+    .venv/bin/python backtest.py --pbp               # does our play-by-play rating?
 
 What it can and cannot answer, stated up front:
 
@@ -328,6 +329,8 @@ def main():
                     help="NFL only: fit the RegTilt coefficients, scored out of sample")
     ap.add_argument("--box", action="store_true",
                     help="NFL only: does fading box-score luck beat FPI and the market?")
+    ap.add_argument("--pbp", action="store_true",
+                    help="NFL only: does our play-by-play rating beat FPI and the market?")
     ap.add_argument("--hfa", action="store_true",
                     help="fit the home-field constant from results")
     args = ap.parse_args()
@@ -346,6 +349,10 @@ def main():
 
     if args.box:
         report_fit_box(fit_box(years))
+        return
+
+    if args.pbp:
+        report_fit_pbp(fit_pbp(years))
         return
 
     if args.fit_reg:
@@ -835,6 +842,139 @@ def report_fit_box(f):
         b = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sum((x - mx) ** 2 for x in xs)
         print(f"\n  Closing line's miss per point of luck so far: {b:+.3f}"
               "   (0 = the market already fades it; + = it still chases luck)")
+
+
+# ---------------- our own play-by-play rating ----------------
+#
+# pbprating.py builds a team rating straight from nflverse play-by-play:
+# opponent-adjusted EPA per snap, recency-weighted, shrunk toward last season.
+# Every prediction here uses only plays from before that week (plus last
+# season), so it is as point-in-time as the FPI files. The question is whether
+# it adds anything FPI and the closing line do not already have, scored
+# walk-forward: the rating's settings, its points scale and the blend weight are
+# all fitted on earlier seasons only, then scored on the next.
+
+PBP_GRID = [(hl, pp) for hl in (3, 6, 12, 0) for pp in (300, 600, 1200)]
+PBP_W_GRID = [i * 0.1 for i in range(0, 11)]
+
+
+def pbp_fit_rows(years):
+    import pbprating
+    import playrules
+    cfg = LEAGUES["nfl"]
+    lines = nfl_closing_lines()
+    id2nv = espn_to_nflverse(years)
+    nv = lambda t: pbprating.RELOC.get(t, t)  # noqa: E731
+    rows = []
+    for yr in years:
+        reg = nfl_reg_tilt(yr)
+        for wk in cfg["weeks"]:
+            games = results_week("nfl", yr, wk)
+            if not games:
+                continue
+            first = min((_dt(g["kickoff"]) for g in games if g.get("kickoff")), default=None)
+            fpi, _ = fpi_asof("nfl", yr, wk, before=first)
+            nets = {(hl, pp): pbprating.net(pbprating.ratings_asof(
+                        yr, wk, half_life=hl, prior_plays=pp)) for hl, pp in PBP_GRID}
+            for g in games:
+                hid, aid = g["home"]["id"], g["away"]["id"]
+                hnv, anv = id2nv.get(hid), id2nv.get(aid)
+                key = (yr, wk, hnv, anv)
+                if hid not in fpi or aid not in fpi or key not in lines:
+                    continue
+                hfa = 0.0 if g["neutral"] else cfg["hfa"]
+                rows.append({"yr": yr, "wk": wk, "hfa": hfa,
+                             "base": fpi[hid] - fpi[aid] + hfa,
+                             "reg": playrules.decay("nfl", wk)
+                                    * (reg.get(hnv, 0.0) - reg.get(anv, 0.0)),
+                             "pbp": {c: n.get(nv(hnv), 0.0) - n.get(nv(anv), 0.0)
+                                     for c, n in nets.items()},
+                             "spread": lines[key], "actual": g["margin"]})
+    return rows
+
+
+def _pbp_scale(rows, c):
+    """Points per unit of EPA/play difference, least squares through zero."""
+    xs = [r["pbp"][c] for r in rows]
+    ys = [r["actual"] - r["hfa"] for r in rows]
+    den = sum(x * x for x in xs)
+    return sum(x * y for x, y in zip(xs, ys)) / den if den else 0.0
+
+
+def _score_pbp(rows, c, s, w, reg=True):
+    err, won, n = 0.0, 0, 0
+    for r in rows:
+        fpi = r["base"] + (r["reg"] if reg else 0.0)
+        pred = (1 - w) * fpi + w * (s * r["pbp"][c] + r["hfa"]) if c else fpi
+        err += abs(pred - r["actual"])
+        if abs(pred - r["spread"]) >= 1 and r["actual"] != r["spread"]:
+            n += 1
+            won += (pred > r["spread"]) == (r["actual"] > r["spread"])
+    return {"mae": err / len(rows) if rows else None, "w": won, "n": n}
+
+
+def _fit_pbp(train):
+    """(setting, scale, best pbp-alone setting, its scale, blend weight)."""
+    scales = {c: _pbp_scale(train, c) for c in PBP_GRID}
+    alone = min(PBP_GRID, key=lambda c: _score_pbp(train, c, scales[c], 1.0)["mae"])
+    best = min(((c, w) for c in PBP_GRID for w in PBP_W_GRID),
+               key=lambda cw: _score_pbp(train, cw[0], scales[cw[0]], cw[1])["mae"])
+    return best[0], scales[best[0]], alone, scales[alone], best[1]
+
+
+def fit_pbp(years):
+    rows = pbp_fit_rows(years)
+    c, s, ca, sa, w = _fit_pbp(rows)
+    seasons = []
+    for yr in years:
+        test = [r for r in rows if r["yr"] == yr]
+        train = [r for r in rows if r["yr"] < yr]
+        if not test or len({r["yr"] for r in train}) < 2:
+            continue
+        tc, ts, tca, tsa, tw = _fit_pbp(train)
+        seasons.append({"yr": yr, "c": tc, "s": ts, "w": tw,
+                        "fpi": _score_pbp(test, None, 0, 0, reg=False),
+                        "current": _score_pbp(test, None, 0, 0),
+                        "pbp": _score_pbp(test, tca, tsa, 1.0),
+                        "blend": _score_pbp(test, tc, ts, tw)})
+    # Does the closing line still miss what the play-by-play rating sees? Regress
+    # the line's miss on the pbp rating's disagreement with it, weeks 4+.
+    mkt = [(r["actual"] - r["spread"], sa * r["pbp"][ca] + r["hfa"] - r["spread"])
+           for r in rows if r["wk"] >= 4]
+    return {"years": years, "n": len(rows), "full": (c, s, w), "alone": (ca, sa),
+            "seasons": seasons, "mkt": mkt}
+
+
+def report_fit_pbp(f):
+    yrs = f["years"]
+    (hl, pp), s, w = f["full"]
+    print(f"\n{'='*80}\nNFL PLAY-BY-PLAY RATING  {yrs[0]}-{yrs[-1]}  ({f['n']} priced games)\n{'='*80}")
+    print(f"  in-sample best: half-life {hl or 'none'} games, prior {pp} snaps, "
+          f"{s:.1f} pts per EPA/play, blend weight {w:.1f}")
+    print("\n  Out of sample (everything fitted only on earlier seasons). MAE against the")
+    print("  result; ATS on plays 1+ point off the closing line (break-even 52.4%).\n")
+    cols = ("fpi", "current", "pbp", "blend")
+    print(f"    {'season':<8}{'w':<6}{'FPI alone':>16}{'FPI + RegTilt':>16}"
+          f"{'pbp alone':>16}{'blend':>16}")
+    tot = {k: [0.0, 0, 0, 0] for k in cols}
+    for x in f["seasons"]:
+        cells = []
+        for k in cols:
+            v = x[k]
+            cells.append(f"{v['mae']:.2f}  {v['w']}-{v['n']-v['w']}")
+            tot[k][0] += v["mae"]; tot[k][1] += v["w"]; tot[k][2] += v["n"]; tot[k][3] += 1
+        print(f"    {x['yr']:<8}{x['w']:<6.1f}" + "".join(f"{c:>16}" for c in cells))
+    if f["seasons"]:
+        cells = [f"{t[0] / t[3]:.3f}  {100 * t[1] / t[2]:.1f}%" if t[2] else "-"
+                 for t in tot.values()]
+        print(f"    {'all':<8}{'':<6}" + "".join(f"{c:>16}" for c in cells))
+    xs = [d for _, d in f["mkt"]]
+    ys = [m for m, _ in f["mkt"]]
+    if len(xs) > 30:
+        mx, my = statistics.mean(xs), statistics.mean(ys)
+        b = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sum((x - mx) ** 2 for x in xs)
+        print(f"\n  Result vs closing line, per point the pbp rating disagrees with it: {b:+.3f}"
+              "\n  (0 = the line already has it; + = the rating sees something the line misses)")
 
 
 if __name__ == "__main__":

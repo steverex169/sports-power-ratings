@@ -237,7 +237,7 @@ The headline number is <b>model vs. the win-total market</b> — where the softe
 <div class="controls"><input id="n-q" placeholder="Search team…" style="min-width:170px">
 <span class="legend"><span><span class="sw" style="background:var(--good)"></span>model &gt; market</span><span><span class="sw" style="background:var(--crit)"></span>model &lt; market</span></span></div>
 <div class="card" style="padding:6px 12px;max-height:600px;overflow:auto"><table id="n-tbl"><thead><tr>
-<th data-k="rank">#</th><th class="l" data-k="team">Team</th><th data-k="fpi">FPI</th><th data-k="my">My Rating</th>
+<th data-k="rank">#</th><th class="l" data-k="team">Team</th><th data-k="fpi">FPI</th><th data-k="pbp" title="Our own rating from nflverse play-by-play: opponent-adjusted EPA per snap, recent games weighted more, started from last season. Same scale as FPI. Bold where it differs from FPI by 3+ points. For reading only: it is not in My Rating (see backtest.py --pbp)">Our PBP</th><th data-k="my">My Rating</th>
 <th class="l" data-k="edge">Edge vs Mkt</th><th data-k="win">Win Tot</th><th data-k="reg">Reg</th><th data-k="qb">QB</th><th data-k="ros">Roster</th>
 <th data-k="wl" title="Actual won-lost record">Record</th><th data-k="dwl" title="Won-lost if every game had gone to the team whose plays were worth more (net passing + rushing EPA)">Deserved</th><th data-k="luck" title="Points per game the scoreboard gave beyond what the plays earned. For reading only: it is not in My Rating, because FPI already discounts it (backtested 2019-2025)">Luck/g</th>
 </tr></thead><tbody id="n-tb"></tbody></table></div>
@@ -891,7 +891,7 @@ const boxOf=(d,k)=>{const b=BOX[d.team];if(!b)return null;
  return k==='wl'?b.w-b.l:k==='dwl'?b.dw-b.dl:b.luck/b.n;};
 let sortK='rank',asc=true;
 function render(){const q=$('#n-q').value.toLowerCase();let rows=DATA.filter(d=>d.team.toLowerCase().includes(q));
- const val=(d,k)=>k==='my'?myOf(d):k==='edge'?edgeOf(d):k==='rank'?myOf(d):['wl','dwl','luck'].includes(k)?(boxOf(d,k)??-99):d[k];
+ const val=(d,k)=>k==='my'?myOf(d):k==='edge'?edgeOf(d):k==='rank'?myOf(d):['wl','dwl','luck'].includes(k)?(boxOf(d,k)??-99):k==='pbp'?(d.pbp??-99):d[k];
  rows.sort((a,b)=>{let x=val(a,sortK),y=val(b,sortK);if(sortK==='rank')return asc?y-x:x-y;
   if(typeof x==='string')return asc?x.localeCompare(y):y.localeCompare(x);return asc?x-y:y-x;});
  $('#n-tb').innerHTML=rows.map((d,i)=>{const e=edgeOf(d),my=myOf(d);
@@ -900,10 +900,12 @@ function render(){const q=$('#n-q').value.toLowerCase();let rows=DATA.filter(d=>
    `<span class="edgebar-wrap" style="width:58px"><span style="position:absolute;left:0;top:0;height:11px;width:${w}px;background:${col};border-radius:3px"></span></span>`;
   const rank=(sortK==='rank'&&asc)?(i+1):d.rank;
   const rtag=d.reg>=0.5?`<span class="qb up">↑luck</span>`:d.reg<=-0.5?`<span class="qb dn">↓luck</span>`:'';
-  return `<tr><td>${rank}</td><td class="l team">${d.team}${rtag}</td><td>${d.fpi.toFixed(1)}</td>
+  return `<tr><td>${rank}</td><td class="l team">${d.team}${rtag}</td><td>${d.fpi.toFixed(1)}</td>${pbpCell(d)}
    <td style="font-weight:700">${my.toFixed(1)} <span class="band">±${d.band}</span></td><td class="l">${bar}</td>
    <td>${d.win}</td><td>${d.reg>0?'+':''}${d.reg.toFixed(1)}</td>
    <td>${d.qb?(d.qb>0?'+':'')+d.qb.toFixed(1):'—'}</td><td>${d.ros?(d.ros>0?'+':'')+d.ros.toFixed(1):'—'}</td>${boxCells(d)}</tr>`;}).join('');}
+function pbpCell(d){if(d.pbp==null)return '<td>—</td>';const gap=d.pbp-d.fpi;
+ return `<td class="${gap>=3?'pos':gap<=-3?'neg':''}" style="font-weight:${Math.abs(gap)>=3?700:400}" title="${gap>0?'+':''}${gap.toFixed(1)} vs FPI">${d.pbp>0?'+':''}${d.pbp.toFixed(1)}</td>`;}
 function boxCells(d){const b=BOX[d.team];
  if(!b) return '<td>—</td><td>—</td><td>—</td>';
  const lk=b.luck/b.n, gap=(b.w-b.l)-(b.dw-b.dl);
